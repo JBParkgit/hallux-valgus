@@ -42,6 +42,7 @@ next-env.d.ts
 
 # python
 venv/
+__pycache__/
 
 # playwright mcp
 .playwright-mcp/
