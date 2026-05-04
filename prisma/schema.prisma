@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Doctor {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  name         String
+  hospital     String   @default("달려라병원")
+  createdAt    DateTime @default(now())
+  cases        Case[]
+}
+
+model Case {
+  id              String   @id @default(cuid())
+  reportHash      String   @unique @default(cuid())
+  patientName     String
+  patientBirth    String
+  patientPhone    String
+  patientRegNo    String
+  patientAge      Int
+  hvaAngle        Float?
+  imaAngle        Float?
+  dmaaAngle       Float?
+  painDuration    String?
+  hypermobility   Boolean  @default(false)
+  jointCongruency String   @default("congruent")
+  osteoarthritis  String   @default("none")
+  previousSurgery Boolean  @default(false)
+  previousSurgeryNote String?
+  clinicalNotes   String?
+  severity        String?
+  algorithmResult String?
+  algorithmReason String?
+  finalDecision   String?
+  overrideReason  String?
+  xrayImageUrl    String?
+  annotatedImageUrl String?
+  angleData       String?
+  doctorId        String
+  doctor          Doctor   @relation(fields: [doctorId], references: [id])
+  alimtalkSent    Boolean  @default(false)
+  alimtalkSentAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
