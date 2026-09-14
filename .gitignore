@@ -46,3 +46,6 @@ __pycache__/
 
 # playwright mcp
 .playwright-mcp/
+
+# claude code local settings
+.claude/
