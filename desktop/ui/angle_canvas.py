@@ -1,20 +1,31 @@
-"""Canvas widget for X-ray angle measurement (HVA, IMA, DMAA).
+"""Canvas widget for X-ray angle measurement, organised around *lines*.
 
-Supports:
-- Clipboard image paste (Ctrl+V)
-- 4-point (2-line) angle measurement per type
-- Live rubber-band line following mouse cursor
-- Real-time angle preview while drawing second line
-- Zoom (mouse wheel) and pan (middle mouse button)
-- Color-coded measurement types with angle labels
-- Dynamic measurement types (for bilateral L-/R- prefixed)
-- Point dragging to adjust measurements
+Each foot (side prefix "L-" / "R-") has four lines, drawn in this order:
+
+    M1   제1중족골 축            (shared reference axis)
+    P1   제1근위지골 축          → HVA  = angle(M1, P1)
+    M2   제2중족골 축            → IMA  = angle(M1, M2)
+    ART  제1중족골 원위 관절면 선 → DMAA = 90° − angle(M1, ART)
+
+The canvas only draws the lines; angle values are shown outside the image
+(side panels) via the ``angle_measured`` / ``angle_reset`` signals.
+
+Interaction:
+- Drag on the image to draw the active line; the next undrawn line on the
+  same side becomes active automatically.
+- Choose any line (``active_line``) to draw — or redraw — it on demand.
+- Drag an endpoint of an existing line to adjust it.
+- Ctrl+Z undoes the last line change, Ctrl+V pastes an X-ray image.
+- Wheel zooms, middle/right-button drag pans.
+
+Saved data keeps the original per-angle 4-point format
+(``{"L-HVA": {"points": [M1a, M1b, P1a, P1b], "angle": ...}, ...}``) so older
+cases and the web report keep working.
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -23,56 +34,71 @@ from PyQt6.QtGui import (
     QFont,
     QMouseEvent,
     QPainter,
+    QPainterPath,
     QPen,
     QPixmap,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import QApplication, QWidget
 
+from desktop.ui import theme
 
-@dataclass
-class MeasurementData:
-    """Stores points and computed angle for a single measurement type."""
+# Line keys in drawing order
+LINE_ORDER: tuple[str, ...] = ("M1", "P1", "M2", "ART")
 
-    color: QColor
-    points: list[QPointF] = field(default_factory=list)
-    angle: float | None = None
+LINE_LABELS: dict[str, str] = {
+    "M1": "제1중족골 축",
+    "P1": "제1근위지골 축",
+    "M2": "제2중족골 축",
+    "ART": "원위 관절면 선",
+}
 
-    @property
-    def is_complete(self) -> bool:
-        return len(self.points) == 4
+# angle base name → second line (first line is always M1)
+ANGLE_LINES: dict[str, str] = {"HVA": "P1", "IMA": "M2", "DMAA": "ART"}
+_LINE_TO_ANGLE: dict[str, str] = {v: k for k, v in ANGLE_LINES.items()}
 
-    def reset(self) -> None:
-        self.points.clear()
-        self.angle = None
+_MIN_DRAG_PX = 4  # shorter drags are treated as clicks (no line)
 
 
-def _is_dmaa(name: str) -> bool:
-    """Check if measurement type is DMAA (including prefixed like L-DMAA)."""
-    return name.endswith("DMAA")
+def split_line_id(line_id: str) -> tuple[str, str]:
+    """'L-P1' → ('L-', 'P1')."""
+    if line_id[:2] in ("L-", "R-"):
+        return line_id[:2], line_id[2:]
+    return "", line_id
+
+
+def line_color(line_id: str) -> QColor:
+    prefix, key = split_line_id(line_id)
+    if key == "M1":
+        return QColor(theme.ANGLE_COLORS["AXIS"])
+    return QColor(theme.ANGLE_COLORS[prefix + _LINE_TO_ANGLE[key]])
+
+
+def _acute_angle(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF) -> float:
+    """Acute angle between two lines in degrees (0–90)."""
+    v1x, v1y = p1.x() - p0.x(), p1.y() - p0.y()
+    v2x, v2y = p3.x() - p2.x(), p3.y() - p2.y()
+    angle = math.degrees(abs(math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y)))
+    return 180 - angle if angle > 90 else angle
 
 
 class AngleCanvas(QWidget):
-    """X-ray image canvas with interactive angle measurement.
+    """X-ray image canvas with line-based angle measurement.
 
     Signals:
-        angle_measured(str, float): Emitted when a 4-point measurement is
-            complete. Args are measurement type name and angle in degrees.
+        angle_measured(str, float): an angle (e.g. "L-HVA") was (re)computed.
+        angle_reset(str): an angle became unavailable (a needed line removed).
+        active_line_changed(str): the line to draw next changed (e.g. "L-P1").
+        lines_changed(): any line was added, moved, or removed.
     """
 
     angle_measured = pyqtSignal(str, float)
-    angle_reset = pyqtSignal(str)  # emitted when undo clears a completed measurement
+    angle_reset = pyqtSignal(str)
+    active_line_changed = pyqtSignal(str)
+    lines_changed = pyqtSignal()
+    image_changed = pyqtSignal()
 
-    DEFAULT_TYPES: dict[str, QColor] = {
-        "HVA": QColor("#e74c3c"),
-        "IMA": QColor("#3498db"),
-        "DMAA": QColor("#27ae60"),
-    }
-
-    # Keep TYPES as alias for backward compatibility
-    TYPES = DEFAULT_TYPES
-
-    _POINT_RADIUS = 4
+    _POINT_RADIUS = 4.5
     _LINE_WIDTH = 2.5
     _DRAG_HIT_RADIUS = 14
 
@@ -82,256 +108,328 @@ class AngleCanvas(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
 
-        # Image
+        # Image / view
         self._pixmap: QPixmap | None = None
         self._zoom: float = 1.0
         self._pan_offset = QPointF(0, 0)
         self._is_panning = False
         self._pan_start = QPointF()
-        self._drawing_line = False
 
-        # Measurements (dynamic types)
-        self._current_types: dict[str, QColor] = dict(self.DEFAULT_TYPES)
-        self._measurements: dict[str, MeasurementData] = {
-            name: MeasurementData(color=color)
-            for name, color in self._current_types.items()
-        }
-        self._active_type: str = next(iter(self._current_types))
+        # Lines & angles
+        self._prefixes: list[str] = [""]
+        self._lines: dict[str, list[QPointF]] = {}  # line_id → [p0, p1]
+        self._angles: dict[str, float | None] = {}
+        self._active_line: str = "M1"
 
-        # Live mouse position (image coords) for rubber-band
+        # Interaction state
         self._mouse_img_pos: QPointF | None = None
+        self._draft_start: QPointF | None = None  # first point of a line being drawn
+        self._dragging: tuple[str, int] | None = None  # (line_id, endpoint index)
+        self._undo: list[tuple[str, list[QPointF] | None]] = []  # (line_id, previous)
+        self._read_only = False
 
-        # Point dragging
-        self._dragging: tuple[str, int] | None = None
+        self._reset_angle_table()
 
-        # Undo stack: tracks point placement order across all types
-        self._action_stack: list[str] = []
+    # ── Configuration ───────────────────────────────────────────
+
+    def set_sides(self, prefixes: list[str]) -> None:
+        """Configure feet, e.g. ["L-", "R-"] for bilateral or [""] for one foot."""
+        self._prefixes = list(prefixes) or [""]
+        self._lines.clear()
+        self._undo.clear()
+        self._reset_angle_table()
+        self.active_line = self._prefixes[0] + "M1"
+
+    def _reset_angle_table(self) -> None:
+        self._angles = {p + a: None for p in self._prefixes for a in ANGLE_LINES}
+
+    def all_line_ids(self) -> list[str]:
+        return [p + k for p in self._prefixes for k in LINE_ORDER]
 
     # ── Public API ──────────────────────────────────────────────
 
     @property
-    def active_type(self) -> str:
-        return self._active_type
+    def active_line(self) -> str:
+        return self._active_line
 
-    @active_type.setter
-    def active_type(self, value: str) -> None:
-        if value in self._measurements:
-            self._active_type = value
-            self.update()
-
-    @property
-    def current_types(self) -> dict[str, QColor]:
-        return dict(self._current_types)
-
-    def set_measurement_types(self, types: dict[str, QColor]) -> None:
-        """Reconfigure measurement types (e.g. switch to bilateral L-/R-)."""
-        self._current_types = dict(types)
-        old = self._measurements
-        self._measurements = {}
-        for name, color in types.items():
-            if name in old:
-                self._measurements[name] = old[name]
-                self._measurements[name].color = color
-            else:
-                self._measurements[name] = MeasurementData(color=color)
-        if self._active_type not in self._measurements:
-            self._active_type = next(iter(self._measurements))
+    @active_line.setter
+    def active_line(self, line_id: str) -> None:
+        if line_id not in self.all_line_ids():
+            return
+        self._draft_start = None
+        if line_id != self._active_line:
+            self._active_line = line_id
+            self.active_line_changed.emit(line_id)
         self.update()
 
-    def set_image(self, pixmap: QPixmap) -> None:
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
+
+    def set_read_only(self, value: bool) -> None:
+        """View-only mode (another doctor's case): zoom/pan only, no edits."""
+        self._read_only = value
+        self._draft_start = None
+        self._dragging = None
+        self.update()
+
+    @property
+    def is_adjusting(self) -> bool:
+        """True while the user is dragging an existing endpoint."""
+        return self._dragging is not None
+
+    def has_line(self, line_id: str) -> bool:
+        return len(self._lines.get(line_id, [])) == 2
+
+    def get_angle(self, measurement_type: str) -> float | None:
+        return self._angles.get(measurement_type)
+
+    def get_all_angles(self) -> dict[str, float | None]:
+        return dict(self._angles)
+
+    def clear_line(self, line_id: str) -> None:
+        if self._read_only:
+            return
+        if line_id in self._lines:
+            self._undo.append((line_id, [QPointF(p) for p in self._lines[line_id]]))
+            del self._lines[line_id]
+            self._after_lines_changed()
+            self.active_line = line_id
+
+    def reset_all(self) -> None:
+        self._lines.clear()
+        self._undo.clear()
+        self._draft_start = None
+        self._dragging = None
+        self._pixmap = None
+        self._zoom = 1.0
+        self._pan_offset = QPointF(0, 0)
+        self._recalc_angles()
+        self.lines_changed.emit()
+        self.active_line = self._prefixes[0] + "M1"
+        self.update()
+
+    def undo_last(self) -> None:
+        """Undo the last line change (Ctrl+Z)."""
+        if not self._undo or self._read_only:
+            return
+        line_id, previous = self._undo.pop()
+        if previous is None:
+            self._lines.pop(line_id, None)
+        else:
+            self._lines[line_id] = previous
+        self._after_lines_changed()
+        self.active_line = line_id
+
+    # Backward-compatible alias
+    undo_last_point = undo_last
+
+    def set_image(self, pixmap: QPixmap, *, notify: bool = True) -> None:
         self._pixmap = pixmap
         self._fit_image()
         self.update()
+        if notify:
+            self.image_changed.emit()
+
+    def has_image(self) -> bool:
+        return self._pixmap is not None and not self._pixmap.isNull()
+
+    def raw_image_png(self) -> bytes | None:
+        """Original X-ray as PNG bytes (no annotations), for upload."""
+        if not self.has_image():
+            return None
+        from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+        data = QByteArray()
+        buf = QBuffer(data)
+        buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        self._pixmap.save(buf, "PNG")
+        buf.close()
+        return bytes(data)
+
+    def load_image_bytes(self, data: bytes) -> bool:
+        px = QPixmap()
+        if not px.loadFromData(data):
+            return False
+        self.set_image(px, notify=False)
+        return True
 
     def paste_from_clipboard(self) -> bool:
         clipboard = QApplication.clipboard()
         if clipboard is None:
             return False
         mime = clipboard.mimeData()
-        if mime is None:
+        if self._read_only or mime is None or not mime.hasImage():
             return False
-        if mime.hasImage():
-            image = clipboard.image()
-            if image and not image.isNull():
-                self._pixmap = QPixmap.fromImage(image)
-                self._fit_image()
-                self.update()
-                return True
+        image = clipboard.image()
+        if image and not image.isNull():
+            self.set_image(QPixmap.fromImage(image))
+            return True
         return False
 
-    def get_angle(self, measurement_type: str) -> float | None:
-        m = self._measurements.get(measurement_type)
-        return m.angle if m else None
-
-    def get_all_angles(self) -> dict[str, float | None]:
-        """Return dict of all measurement angles."""
-        return {name: m.angle for name, m in self._measurements.items()}
-
-    def reset_measurement(self, measurement_type: str) -> None:
-        m = self._measurements.get(measurement_type)
-        if m:
-            m.reset()
-            self._action_stack = [n for n in self._action_stack if n != measurement_type]
-            self.update()
-
-    def reset_all(self) -> None:
-        for m in self._measurements.values():
-            m.reset()
-        self._action_stack.clear()
-        self._pixmap = None
-        self._zoom = 1.0
-        self._pan_offset = QPointF(0, 0)
-        self.update()
-
-    def undo_last_point(self) -> None:
-        """Undo the last point placed (Ctrl+Z). Works across measurement types."""
-        if not self._action_stack:
-            return
-        name = self._action_stack.pop()
-        m = self._measurements.get(name)
-        if m and m.points:
-            was_complete = m.is_complete
-            m.points.pop()
-            if was_complete:
-                m.angle = None
-                self.angle_reset.emit(name)
-            self.update()
-
-    def get_measurements_data(self) -> dict:
-        """Export measurement points/angles (without image) for DB storage."""
-        result: dict = {}
-        for name, m in self._measurements.items():
-            result[name] = {
-                "points": [(p.x(), p.y()) for p in m.points],
-                "angle": m.angle,
-            }
-        return result
-
-    def load_measurements_data(self, data: dict) -> None:
-        """Restore measurement points/angles from saved data."""
-        for name, m in self._measurements.items():
-            if name in data:
-                d = data[name]
-                m.points = [QPointF(x, y) for x, y in d.get("points", [])]
-                m.angle = d.get("angle")
-            else:
-                m.reset()
-        self.update()
-
-    def save_image_to_file(self, path: str) -> bool:
-        """Save annotated X-ray image (with measurement lines & angles) to a file."""
-        if not self._pixmap or self._pixmap.isNull():
-            return False
-
-        # Render measurements onto a copy of the original image
-        result = QPixmap(self._pixmap.size())
-        painter = QPainter(result)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.drawPixmap(0, 0, self._pixmap)
-
-        # Draw all completed measurements in image coordinates
-        img_w = self._pixmap.width()
-        line_width = max(2.0, img_w / 300)
-        point_radius = max(4.0, img_w / 200)
-        font_size = max(14, img_w // 40)
-
-        for name, m in self._measurements.items():
-            if not m.points:
-                continue
-
-            color = QColor(m.color)
-            pen = QPen(color, line_width)
-            painter.setPen(pen)
-
-            pts = m.points
-
-            # Draw points
-            for p in pts:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QBrush(color))
-                painter.drawEllipse(p, point_radius, point_radius)
-
-            # Draw line 1 (extended)
-            if len(pts) >= 2:
-                self._draw_extended_line_on_image(painter, pts[0], pts[1], pen, img_w)
-
-            # Draw line 2 (extended)
-            if len(pts) >= 4:
-                self._draw_extended_line_on_image(painter, pts[2], pts[3], pen, img_w)
-
-                # Draw angle label
-                if m.angle is not None:
-                    self._draw_angle_label_on_image(
-                        painter, pts[3], name, m.angle, color, font_size,
-                    )
-
-        painter.end()
-        return result.save(path, "PNG")
-
-    @staticmethod
-    def _draw_extended_line_on_image(
-        painter: QPainter, p0: QPointF, p1: QPointF, pen: QPen, img_w: int,
-    ) -> None:
-        dx = p1.x() - p0.x()
-        dy = p1.y() - p0.y()
-        length = math.hypot(dx, dy)
-        if length < 1:
-            return
-        nx, ny = dx / length, dy / length
-        ext = img_w * 0.05
-        painter.setPen(pen)
-        painter.drawLine(
-            QPointF(p0.x() - nx * ext, p0.y() - ny * ext),
-            QPointF(p1.x() + nx * ext, p1.y() + ny * ext),
-        )
-
-    @staticmethod
-    def _draw_angle_label_on_image(
-        painter: QPainter,
-        pos: QPointF,
-        name: str,
-        angle: float,
-        color: QColor,
-        font_size: int,
-    ) -> None:
-        text = f"{name}: {angle:.1f}\u00b0"
-        font = QFont("\ub9d1\uc740 \uace0\ub515", font_size, QFont.Weight.Bold)
-        painter.setFont(font)
-
-        fm = painter.fontMetrics()
-        text_rect = fm.boundingRect(text)
-        padding = font_size // 2
-
-        bg_rect = QRectF(
-            pos.x() + font_size,
-            pos.y() - text_rect.height() / 2 - padding,
-            text_rect.width() + padding * 2,
-            text_rect.height() + padding * 2,
-        )
-
-        bg_color = QColor(color)
-        bg_color.setAlpha(200)
-        painter.setBrush(QBrush(bg_color))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(bg_rect, 6, 6)
-
-        painter.setPen(QColor("white"))
-        painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, text)
-
     def load_image_from_file(self, path: str) -> bool:
-        """Load X-ray image from a file. Returns True on success."""
         import os
         if not os.path.exists(path):
             return False
         px = QPixmap(path)
         if px.isNull():
             return False
-        self._pixmap = px
-        self._fit_image()
-        self.update()
+        self.set_image(px, notify=False)
         return True
 
-    # ── Coordinate Transforms ───────────────────────────────────
+    def save_raw_image(self, path: str) -> bool:
+        """Save the original X-ray (no annotations)."""
+        if not self._pixmap or self._pixmap.isNull():
+            return False
+        return self._pixmap.save(path, "PNG")
+
+    def save_image_to_file(self, path: str) -> bool:
+        """Save the X-ray with measurement lines drawn on it (no angle labels)."""
+        if not self._pixmap or self._pixmap.isNull():
+            return False
+        result = QPixmap(self._pixmap.size())
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawPixmap(0, 0, self._pixmap)
+        img_w = self._pixmap.width()
+        width = max(2.0, img_w / 300)
+        radius = max(4.0, img_w / 200)
+        ext = img_w * 0.05
+        for line_id, pts in self._lines.items():
+            if len(pts) != 2:
+                continue
+            color = line_color(line_id)
+            self._draw_extended(painter, pts[0], pts[1], QPen(color, width), ext)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(color))
+            for p in pts:
+                painter.drawEllipse(p, radius, radius)
+        painter.end()
+        return result.save(path, "PNG")
+
+    # ── Persistence (per-angle 4-point format) ──────────────────
+
+    def get_measurements_data(self) -> dict:
+        result: dict = {}
+        for prefix in self._prefixes:
+            m1 = self._lines.get(prefix + "M1", [])
+            for angle, second in ANGLE_LINES.items():
+                sec = self._lines.get(prefix + second, [])
+                pts = (m1 if len(m1) == 2 else []) + (sec if len(m1) == 2 else [])
+                result[prefix + angle] = {
+                    "points": [(p.x(), p.y()) for p in pts],
+                    "angle": self._angles.get(prefix + angle),
+                }
+        # Every drawn line, even ones without an M1 axis yet (not an angle
+        # entry: the web report skips keys without "points").
+        result["lines"] = {
+            lid: [(p.x(), p.y()) for p in pts]
+            for lid, pts in self._lines.items()
+            if len(pts) == 2
+        }
+        return result
+
+    def load_measurements_data(self, data: dict) -> list[str]:
+        """Restore lines from saved data.
+
+        Returns angle names whose recomputed value differs from the saved value
+        (happens for cases saved before the M1 axis was shared).
+        """
+        self._lines.clear()
+        self._undo.clear()
+        saved_lines = data.get("lines")
+        if isinstance(saved_lines, dict):
+            valid = set(self.all_line_ids())
+            for lid, pts in saved_lines.items():
+                if lid in valid and len(pts) == 2:
+                    self._lines[lid] = [QPointF(*pts[0]), QPointF(*pts[1])]
+        for prefix in ([] if isinstance(saved_lines, dict) else self._prefixes):
+            # M1 axis: first angle that has it (HVA preferred)
+            for angle in ANGLE_LINES:
+                pts = (data.get(prefix + angle) or {}).get("points") or []
+                if len(pts) >= 2:
+                    self._lines[prefix + "M1"] = [QPointF(*pts[0]), QPointF(*pts[1])]
+                    break
+            for angle, second in ANGLE_LINES.items():
+                pts = (data.get(prefix + angle) or {}).get("points") or []
+                if len(pts) >= 4:
+                    self._lines[prefix + second] = [QPointF(*pts[2]), QPointF(*pts[3])]
+
+        self._recalc_angles(emit=False)
+        changed: list[str] = []
+        for name, value in self._angles.items():
+            saved = (data.get(name) or {}).get("angle")
+            if value is not None and saved is not None and abs(value - saved) > 0.05:
+                changed.append(name)
+        self.lines_changed.emit()
+        self._advance_from(self._prefixes[0] + "M1", include_self=True)
+        self.update()
+        return changed
+
+    # ── Internals: lines → angles ───────────────────────────────
+
+    def _recalc_angles(self, emit: bool = True) -> None:
+        for prefix in self._prefixes:
+            m1 = self._lines.get(prefix + "M1")
+            for angle, second in ANGLE_LINES.items():
+                name = prefix + angle
+                sec = self._lines.get(prefix + second)
+                old = self._angles.get(name)
+                if m1 and sec and len(m1) == 2 and len(sec) == 2:
+                    raw = _acute_angle(m1[0], m1[1], sec[0], sec[1])
+                    new: float | None = (90 - raw) if angle == "DMAA" else raw
+                else:
+                    new = None
+                self._angles[name] = new
+                if not emit:
+                    continue
+                if new is None and old is not None:
+                    self.angle_reset.emit(name)
+                elif new is not None and (old is None or abs(new - old) > 1e-9):
+                    self.angle_measured.emit(name, new)
+
+    def _after_lines_changed(self) -> None:
+        self._recalc_angles()
+        self.lines_changed.emit()
+        self.update()
+
+    def _advance_from(self, line_id: str, include_self: bool = False) -> None:
+        """Make the next undrawn line on the same side active (in LINE_ORDER)."""
+        prefix, key = split_line_id(line_id)
+        start = LINE_ORDER.index(key)
+        order = LINE_ORDER[start:] + LINE_ORDER[:start]
+        if not include_self:
+            order = order[1:]
+        for k in order:
+            if not self.has_line(prefix + k):
+                self.active_line = prefix + k
+                return
+        # This side is done → continue on the next side (e.g. left → right)
+        idx = self._prefixes.index(prefix)
+        for other in self._prefixes[idx + 1:] + self._prefixes[:idx]:
+            for k in LINE_ORDER:
+                if not self.has_line(other + k):
+                    self.active_line = other + k
+                    return
+        if include_self:
+            self.active_line = line_id
+
+    def guide_text(self) -> str:
+        if self._pixmap is None:
+            return ""
+        if self._read_only:
+            return "읽기 전용  ·  휠: 확대/축소   가운데 버튼 드래그: 이동"
+        prefix, key = split_line_id(self._active_line)
+        side = {"L-": "좌측 ", "R-": "우측 "}.get(prefix, "")
+        step = LINE_ORDER.index(key) + 1
+        label = LINE_LABELS[key]
+        if all(self.has_line(lid) for lid in self.all_line_ids()):
+            scope = "양측 " if len(self._prefixes) > 1 else ""
+            return f"{scope}측정 완료  ·  점을 드래그해 조정하거나 선을 골라 다시 그릴 수 있습니다"
+        if self.has_line(self._active_line):
+            return f"{side}{label}을 다시 그리려면 드래그하세요"
+        return f"{step}/4  {side}{label}을 드래그로 그리세요"
+
+    # ── Coordinate transforms ───────────────────────────────────
 
     def _widget_to_image(self, pos: QPointF) -> QPointF:
         return QPointF(
@@ -353,111 +451,68 @@ class AngleCanvas(QWidget):
         self._zoom = min(w_ratio, h_ratio) * 0.95
         img_w = self._pixmap.width() * self._zoom
         img_h = self._pixmap.height() * self._zoom
-        self._pan_offset = QPointF(
-            (self.width() - img_w) / 2,
-            (self.height() - img_h) / 2,
-        )
+        self._pan_offset = QPointF((self.width() - img_w) / 2, (self.height() - img_h) / 2)
 
-    # ── Angle Calculation ───────────────────────────────────────
+    def _hit_test(self, widget_pos: QPointF) -> tuple[str, int] | None:
+        """Nearest endpoint of an existing line within the hit radius.
 
-    @staticmethod
-    def _calc_angle(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF) -> float:
-        """Calculate the acute angle between two lines in degrees (always <= 90)."""
-        v1x = p1.x() - p0.x()
-        v1y = p1.y() - p0.y()
-        v2x = p3.x() - p2.x()
-        v2y = p3.y() - p2.y()
-        cross = v1x * v2y - v1y * v2x
-        dot = v1x * v2x + v1y * v2y
-        angle = math.degrees(abs(math.atan2(cross, dot)))
-        if angle > 90:
-            angle = 180 - angle
-        return angle
-
-    @staticmethod
-    def _line_intersection(
-        p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF,
-    ) -> QPointF | None:
-        d1x = p1.x() - p0.x()
-        d1y = p1.y() - p0.y()
-        d2x = p3.x() - p2.x()
-        d2y = p3.y() - p2.y()
-        denom = d1x * d2y - d1y * d2x
-        if abs(denom) < 1e-10:
+        While the active line is still undrawn, clicks always start a new line
+        (its start often sits right on another line's endpoint, e.g. the MTP
+        joint), so no endpoint is grabbed then.
+        """
+        if not self.has_line(self._active_line):
             return None
-        t = ((p2.x() - p0.x()) * d2y - (p2.y() - p0.y()) * d2x) / denom
-        return QPointF(p0.x() + t * d1x, p0.y() + t * d1y)
-
-    # ── Hit Test & Recalc ────────────────────────────────────────
-
-    def _hit_test_point(self, widget_pos: QPointF) -> tuple[str, int] | None:
-        """Check if widget_pos is near any point of the active measurement type."""
-        m = self._measurements.get(self._active_type)
-        if m is None:
-            return None
-        for i, pt in enumerate(m.points):
-            wpt = self._image_to_widget(pt)
-            dx = widget_pos.x() - wpt.x()
-            dy = widget_pos.y() - wpt.y()
-            if math.hypot(dx, dy) <= self._DRAG_HIT_RADIUS:
-                return (self._active_type, i)
-        return None
-
-    def _recalc_angle(self, name: str) -> None:
-        """Recalculate angle for a complete measurement and emit signal."""
-        m = self._measurements[name]
-        if not m.is_complete:
-            return
-        pts = m.points
-        raw = self._calc_angle(pts[0], pts[1], pts[2], pts[3])
-        m.angle = (90 - raw) if _is_dmaa(name) else raw
-        self.angle_measured.emit(name, m.angle)
+        best: tuple[float, tuple[str, int]] | None = None
+        for line_id, pts in self._lines.items():
+            for i, p in enumerate(pts):
+                wp = self._image_to_widget(p)
+                d = math.hypot(widget_pos.x() - wp.x(), widget_pos.y() - wp.y())
+                if d <= self._DRAG_HIT_RADIUS and (best is None or d < best[0]):
+                    best = (d, (line_id, i))
+        return best[1] if best else None
 
     # ── Events ──────────────────────────────────────────────────
 
     def contextMenuEvent(self, event) -> None:  # type: ignore[override]
-        """Suppress right-click context menu (right-click is used for panning)."""
         if event is not None:
             event.accept()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
         if event is None:
             return
-        if event.key() == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        ctrl = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        if event.key() == Qt.Key.Key_V and ctrl:
             self.paste_from_clipboard()
-        elif event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self.undo_last_point()
+        elif event.key() == Qt.Key.Key_Z and ctrl:
+            self.undo_last()
+        elif event.key() == Qt.Key.Key_Escape and self._draft_start is not None:
+            self._draft_start = None
+            self.update()
         else:
             super().keyPressEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
-
         if event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
             self._is_panning = True
             self._pan_start = event.position() - self._pan_offset
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             return
+        if event.button() != Qt.MouseButton.LeftButton or self._pixmap is None or self._read_only:
+            return
 
-        if event.button() == Qt.MouseButton.LeftButton and self._pixmap is not None:
-            # Check for dragging existing point first
-            hit = self._hit_test_point(event.position())
-            if hit:
-                self._dragging = hit
-                self.setCursor(Qt.CursorShape.CrossCursor)
-                return
+        hit = self._hit_test(event.position())
+        if hit:
+            line_id, _ = hit
+            self._undo.append((line_id, [QPointF(p) for p in self._lines[line_id]]))
+            self._dragging = hit
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+            return
 
-            m = self._measurements[self._active_type]
-            if m.is_complete:
-                return
-
-            # Place first point of a line pair; second point on release
-            img_pos = self._widget_to_image(event.position())
-            m.points.append(img_pos)
-            self._action_stack.append(self._active_type)
-            self._drawing_line = True
-            self.update()
+        self._draft_start = self._widget_to_image(event.position())
+        self._mouse_img_pos = self._draft_start
+        self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
@@ -466,56 +521,69 @@ class AngleCanvas(QWidget):
             self._pan_offset = event.position() - self._pan_start
             self.update()
             return
+        if self._pixmap is None:
+            return
+        self._mouse_img_pos = self._widget_to_image(event.position())
 
-        # Dragging an existing point
         if self._dragging is not None:
-            name, idx = self._dragging
-            m = self._measurements[name]
-            m.points[idx] = self._widget_to_image(event.position())
-            if m.is_complete:
-                self._recalc_angle(name)
+            line_id, idx = self._dragging
+            self._lines[line_id][idx] = self._mouse_img_pos
+            self._recalc_angles()
             self.update()
             return
 
-        # Track mouse for rubber-band line
-        if self._pixmap is not None:
-            self._mouse_img_pos = self._widget_to_image(event.position())
-            m = self._measurements[self._active_type]
-            n = len(m.points)
-            if n in (1, 3):
-                self.update()
+        if self._read_only:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        elif self._draft_start is not None:
+            self.update()
+        elif self._hit_test(event.position()):
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+        else:
+            self.setCursor(Qt.CursorShape.CrossCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
-        if event.button() == Qt.MouseButton.LeftButton and self._dragging is not None:
-            self._dragging = None
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            return
-        if event.button() == Qt.MouseButton.LeftButton and getattr(self, "_drawing_line", False):
-            self._drawing_line = False
-            m = self._measurements[self._active_type]
-            n = len(m.points)
-            # n is odd (1 or 3) means we just placed the start; place end point now
-            if n in (1, 3) and self._mouse_img_pos is not None:
-                m.points.append(self._mouse_img_pos)
-                self._action_stack.append(self._active_type)
-                if m.is_complete:
-                    self._recalc_angle(self._active_type)
-                self.update()
-            return
         if event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
             self._is_panning = False
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            return
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+
+        if self._dragging is not None:
+            line_id, _ = self._dragging
+            self._dragging = None
+            # Drop the undo snapshot if the endpoint didn't actually move
+            if self._undo and self._undo[-1][0] == line_id and self._undo[-1][1] == self._lines.get(line_id):
+                self._undo.pop()
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.lines_changed.emit()
+            self.update()
+            return
+
+        if self._draft_start is None:
+            return
+        start = self._draft_start
+        end = self._widget_to_image(event.position())
+        self._draft_start = None
+        ws, we = self._image_to_widget(start), self._image_to_widget(end)
+        if math.hypot(we.x() - ws.x(), we.y() - ws.y()) < _MIN_DRAG_PX:
+            self.update()
+            return
+
+        line_id = self._active_line
+        previous = self._lines.get(line_id)
+        self._undo.append((line_id, [QPointF(p) for p in previous] if previous else None))
+        self._lines[line_id] = [start, end]
+        self._after_lines_changed()
+        self._advance_from(line_id)
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:
-        if event is None:
-            return
-        if self._pixmap is None:
+        if event is None or self._pixmap is None:
             return
         old_zoom = self._zoom
-        delta = event.angleDelta().y()
-        factor = 1.15 if delta > 0 else 1 / 1.15
+        factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self._zoom = max(0.1, min(10.0, self._zoom * factor))
         mouse_pos = event.position()
         self._pan_offset = mouse_pos - (mouse_pos - self._pan_offset) * (self._zoom / old_zoom)
@@ -531,146 +599,146 @@ class AngleCanvas(QWidget):
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#1a1a2e"))
+        painter.fillRect(self.rect(), QColor(theme.BG))
+        frame = QPainterPath()
+        frame.addRoundedRect(QRectF(self.rect()), 14, 14)
+        painter.setClipPath(frame)
+        painter.fillRect(self.rect(), QColor(theme.CANVAS_BG))
 
         if self._pixmap is None or self._pixmap.isNull():
             self._draw_placeholder(painter)
             painter.end()
             return
 
-        # Draw image
         painter.save()
         painter.translate(self._pan_offset)
         painter.scale(self._zoom, self._zoom)
         painter.drawPixmap(0, 0, self._pixmap)
         painter.restore()
 
-        # Draw all completed/in-progress measurements
-        for name, m in self._measurements.items():
-            is_active = name == self._active_type
-            self._draw_measurement(painter, name, m, is_active)
+        # Inactive lines first, active line on top
+        ids = sorted(self._lines, key=lambda lid: lid == self._active_line)
+        for line_id in ids:
+            pts = self._lines[line_id]
+            if len(pts) == 2:
+                self._draw_line(painter, line_id, pts, line_id == self._active_line)
 
+        # Line being drawn
+        if self._draft_start is not None and self._mouse_img_pos is not None:
+            color = line_color(self._active_line)
+            a = self._image_to_widget(self._draft_start)
+            b = self._image_to_widget(self._mouse_img_pos)
+            self._draw_extended(painter, a, b, QPen(color, self._LINE_WIDTH + 0.5, Qt.PenStyle.DashLine), 40)
+            for p in (a, b):
+                painter.setPen(QPen(QColor(255, 255, 255, 220), 1.5))
+                painter.setBrush(QBrush(color))
+                painter.drawEllipse(p, self._POINT_RADIUS, self._POINT_RADIUS)
+
+        self._draw_guide(painter)
         painter.end()
 
-    def _draw_placeholder(self, painter: QPainter) -> None:
-        painter.setPen(QColor("#7f8c8d"))
-        painter.setFont(QFont("맑은 고딕", 14))
-        painter.drawText(
-            self.rect(),
-            Qt.AlignmentFlag.AlignCenter,
-            "Ctrl+V 로 X-ray 이미지를 붙여넣기 하세요",
-        )
-
-    def _draw_measurement(
-        self, painter: QPainter, name: str, m: MeasurementData, is_active: bool,
-    ) -> None:
-        if not m.points and not is_active:
-            return
-
-        color = QColor(m.color)
-        if not is_active:
-            color.setAlpha(160)
-
-        pen_solid = QPen(color, self._LINE_WIDTH)
-        pen_dash = QPen(color, self._LINE_WIDTH, Qt.PenStyle.DashLine)
-
-        n = len(m.points)
-        widget_pts = [self._image_to_widget(p) for p in m.points]
-
-        # Draw placed points
-        for wp in widget_pts:
-            painter.setPen(Qt.PenStyle.NoPen)
+    def _draw_line(self, painter: QPainter, line_id: str, pts: list[QPointF], active: bool) -> None:
+        color = line_color(line_id)
+        if not active:
+            color.setAlpha(185)
+        if self._draft_start is not None and active:
+            color.setAlpha(70)  # being redrawn: fade the old version
+        width = self._LINE_WIDTH + (0.8 if active else 0)
+        a, b = (self._image_to_widget(p) for p in pts)
+        self._draw_extended(painter, a, b, QPen(color, width), 40)
+        for p in (a, b):
+            painter.setPen(QPen(QColor(255, 255, 255, 220 if active else 130), 1.5))
             painter.setBrush(QBrush(color))
-            painter.drawEllipse(wp, self._POINT_RADIUS, self._POINT_RADIUS)
+            painter.drawEllipse(p, self._POINT_RADIUS, self._POINT_RADIUS)
 
-        mouse_w = self._image_to_widget(self._mouse_img_pos) if self._mouse_img_pos else None
-
-        # ── Line 1 ────────────────────────────────────────────
-        if n == 1 and is_active and mouse_w:
-            self._draw_extended_line(painter, widget_pts[0], mouse_w, pen_dash)
-            ghost_color = QColor(color)
-            ghost_color.setAlpha(100)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(ghost_color))
-            painter.drawEllipse(mouse_w, self._POINT_RADIUS, self._POINT_RADIUS)
-
-        elif n >= 2:
-            self._draw_extended_line(painter, widget_pts[0], widget_pts[1], pen_solid)
-
-        # ── Line 2 ────────────────────────────────────────────
-        if n == 3 and is_active and mouse_w:
-            self._draw_extended_line(painter, widget_pts[2], mouse_w, pen_dash)
-            ghost_color = QColor(color)
-            ghost_color.setAlpha(100)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(ghost_color))
-            painter.drawEllipse(mouse_w, self._POINT_RADIUS, self._POINT_RADIUS)
-
-            # Live angle preview at mouse position (end of second line)
-            raw_live = self._calc_angle(
-                m.points[0], m.points[1], m.points[2], self._mouse_img_pos,
-            )
-            live_angle = (90 - raw_live) if _is_dmaa(name) else raw_live
-            self._draw_angle_label(painter, mouse_w, name, live_angle, color, preview=True)
-
-        elif n >= 4:
-            self._draw_extended_line(painter, widget_pts[2], widget_pts[3], pen_solid)
-
-            if m.angle is not None:
-                # Show label at the end of the second line (4th point)
-                label_pos = widget_pts[3]
-                self._draw_angle_label(painter, label_pos, name, m.angle, color, preview=False)
-
-    def _draw_extended_line(
-        self, painter: QPainter, p0: QPointF, p1: QPointF, pen: QPen,
-    ) -> None:
-        dx = p1.x() - p0.x()
-        dy = p1.y() - p0.y()
+    @staticmethod
+    def _draw_extended(painter: QPainter, p0: QPointF, p1: QPointF, pen: QPen, ext: float) -> None:
+        dx, dy = p1.x() - p0.x(), p1.y() - p0.y()
         length = math.hypot(dx, dy)
         if length < 1:
             return
         nx, ny = dx / length, dy / length
-        ext = 40
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.drawLine(
             QPointF(p0.x() - nx * ext, p0.y() - ny * ext),
             QPointF(p1.x() + nx * ext, p1.y() + ny * ext),
         )
 
-    def _draw_angle_label(
-        self,
-        painter: QPainter,
-        pos: QPointF,
-        name: str,
-        angle: float,
-        color: QColor,
-        preview: bool = False,
-    ) -> None:
-        text = f"{name}: {angle:.1f}°"
-        font = QFont("맑은 고딕", 11, QFont.Weight.Bold)
-        painter.setFont(font)
-
+    def _draw_guide(self, painter: QPainter) -> None:
+        text = self.guide_text()
+        if not text:
+            return
+        painter.setFont(theme.font(10, QFont.Weight.DemiBold))
         fm = painter.fontMetrics()
-        text_rect = fm.boundingRect(text)
-        padding = 6
+        dot = 10
+        w = fm.horizontalAdvance(text) + 40 + dot
+        h = 34
+        r = QRectF((self.width() - w) / 2, self.height() - h - 16, w, h)
+        painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+        painter.setBrush(QColor(10, 14, 23, 215))
+        painter.drawRoundedRect(r, h / 2, h / 2)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(theme.MUTED) if self._read_only else line_color(self._active_line))
+        painter.drawEllipse(QPointF(r.left() + 18, r.center().y()), dot / 2, dot / 2)
+        painter.setPen(QColor(255, 255, 255, 235))
+        painter.drawText(r.adjusted(18 + dot, 0, 0, 0), Qt.AlignmentFlag.AlignCenter, text)
 
-        bg_rect = QRectF(
-            pos.x() + 12,
-            pos.y() - text_rect.height() / 2 - padding,
-            text_rect.width() + padding * 2,
-            text_rect.height() + padding * 2,
+    def _draw_placeholder(self, painter: QPainter) -> None:
+        c = QRectF(self.rect()).center()
+        box = QRectF(c.x() - 190, c.y() - 110, 380, 220)
+
+        pen = QPen(QColor(255, 255, 255, 40), 1.5, Qt.PenStyle.DashLine)
+        pen.setDashPattern([6, 5])
+        painter.setPen(pen)
+        painter.setBrush(QColor(255, 255, 255, 6))
+        painter.drawRoundedRect(box, 16, 16)
+
+        g = QRectF(c.x() - 22, box.top() + 34, 44, 36)
+        gpen = QPen(QColor(255, 255, 255, 110), 2)
+        gpen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(gpen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(g, 6, 6)
+        mount = QPainterPath()
+        mount.moveTo(g.left() + 6, g.bottom() - 6)
+        mount.lineTo(g.left() + 18, g.top() + 16)
+        mount.lineTo(g.left() + 27, g.bottom() - 12)
+        mount.lineTo(g.left() + 32, g.bottom() - 17)
+        mount.lineTo(g.right() - 6, g.bottom() - 6)
+        painter.drawPath(mount)
+        painter.drawEllipse(QPointF(g.right() - 11, g.top() + 10), 3, 3)
+
+        painter.setPen(QColor(255, 255, 255, 220))
+        painter.setFont(theme.font(13, QFont.Weight.DemiBold))
+        painter.drawText(
+            QRectF(box.left(), g.bottom() + 16, box.width(), 24),
+            Qt.AlignmentFlag.AlignCenter,
+            "X-ray 이미지를 붙여넣으세요",
         )
 
-        bg_color = QColor(color)
-        bg_color.setAlpha(140 if preview else 200)
-        painter.setBrush(QBrush(bg_color))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(bg_rect, 4, 4)
+        painter.setFont(theme.font(9, QFont.Weight.DemiBold))
+        fm = painter.fontMetrics()
+        y = g.bottom() + 52
+        items = ["Ctrl", "+", "V"]
+        widths = [fm.horizontalAdvance(t) + (18 if t != "+" else 4) for t in items]
+        x = c.x() - (sum(widths) + 8 * (len(items) - 1)) / 2
+        for t, w in zip(items, widths):
+            r = QRectF(x, y, w, 24)
+            if t != "+":
+                painter.setPen(QPen(QColor(255, 255, 255, 60), 1))
+                painter.setBrush(QColor(255, 255, 255, 18))
+                painter.drawRoundedRect(r, 6, 6)
+                painter.setPen(QColor(255, 255, 255, 200))
+            else:
+                painter.setPen(QColor(255, 255, 255, 110))
+            painter.drawText(r, Qt.AlignmentFlag.AlignCenter, t)
+            x += w + 8
 
-        if preview:
-            painter.setPen(QPen(QColor("white"), 1, Qt.PenStyle.DashLine))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(bg_rect, 4, 4)
-
-        painter.setPen(QColor("white"))
-        painter.drawText(bg_rect, Qt.AlignmentFlag.AlignCenter, text)
+        painter.setPen(QColor(255, 255, 255, 90))
+        painter.setFont(theme.font(9))
+        painter.drawText(
+            QRectF(box.left(), y + 34, box.width(), 20),
+            Qt.AlignmentFlag.AlignCenter,
+            "휠: 확대/축소   ·   가운데 버튼 드래그: 이동",
+        )

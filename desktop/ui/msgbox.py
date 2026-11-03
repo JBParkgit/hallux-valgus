@@ -2,39 +2,21 @@
 
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-_MSGBOX_STYLE = """
-QMessageBox {
-    background-color: #ffffff;
-}
-QMessageBox QLabel {
-    color: #2c3e50;
-    font-size: 13px;
-}
-QMessageBox QDialogButtonBox {
-    qproperty-centerButtons: true;
-}
-QMessageBox QPushButton {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 20px;
-    font-size: 13px;
-    font-weight: bold;
-    min-width: 80px;
-    min-height: 32px;
-}
-QMessageBox QPushButton:hover {
-    background-color: #2980b9;
-}
-QMessageBox QPushButton:pressed {
-    background-color: #2472a4;
-}
-"""
-
-
 def _styled(msg: QMessageBox) -> QMessageBox:
-    msg.setStyleSheet(_MSGBOX_STYLE)
+    """Apply theme tweaks: non-default buttons render as secondary."""
+    from desktop.ui import theme
+
+    # Only the text label gets a min width (not the icon label)
+    msg.setStyleSheet(
+        "QMessageBox { background-color: %s; } QLabel#qt_msgbox_label { min-width: 260px; }" % theme.SURFACE
+    )
+    secondary_roles = {
+        QMessageBox.ButtonRole.RejectRole,
+        QMessageBox.ButtonRole.NoRole,
+    }
+    for btn in msg.buttons():
+        if msg.buttonRole(btn) in secondary_roles:
+            theme.set_variant(btn, "secondary")
     return msg
 
 

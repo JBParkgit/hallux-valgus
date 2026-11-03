@@ -3,23 +3,96 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import QModelIndex, QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from desktop.ui import msgbox
+from desktop.ui import msgbox, theme
+
+
+class _SeverityDelegate(QStyledItemDelegate):
+    """Paints '경증 / 중등도' style text as rounded colour pills."""
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        # Background (hover / selection) from the default style, but no text.
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else None
+        if style is not None:
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, opt.widget)
+
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        parts = [t.strip() for t in str(text).split("/") if t.strip()]
+        if not parts:
+            return
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        f = theme.font(9, QFont.Weight.DemiBold)
+        painter.setFont(f)
+        fm = painter.fontMetrics()
+        x = option.rect.x() + 12
+        h = 22
+        y = option.rect.center().y() - h / 2 + 1
+        for part in parts:
+            fg, bg = theme.SEVERITY_STYLE.get(part, (theme.MUTED, theme.SURFACE_ALT))
+            w = fm.horizontalAdvance(part) + 18
+            r = QRectF(x, y, w, h)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(bg))
+            painter.drawRoundedRect(r, h / 2, h / 2)
+            painter.setPen(QColor(fg))
+            painter.drawText(r, Qt.AlignmentFlag.AlignCenter, part)
+            x += w + 6
+        painter.restore()
+
+
+class _StatCard(QWidget):
+    """Small KPI tile: caption + big number + hint."""
+
+    def __init__(self, caption: str, accent: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        frame = theme.card(self, shadow=False)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(frame)
+
+        ly = QVBoxLayout(frame)
+        ly.setContentsMargins(18, 16, 18, 16)
+        ly.setSpacing(4)
+
+        top = QHBoxLayout()
+        dot = QLabel()
+        dot.setFixedSize(8, 8)
+        dot.setStyleSheet(f"background-color: {accent}; border-radius: 4px;")
+        top.addWidget(dot)
+        top.addSpacing(4)
+        top.addWidget(theme.label(caption, "overline"))
+        top.addStretch()
+        ly.addLayout(top)
+
+        self.value = theme.label("0", "value")
+        ly.addWidget(self.value)
+        self.hint = theme.label("", "caption")
+        ly.addWidget(self.hint)
 
 
 class DashboardWidget(QWidget):
@@ -30,15 +103,10 @@ class DashboardWidget(QWidget):
     case_deleted = pyqtSignal()  # emitted after successful deletion
 
     # Column definitions
-    _COLUMNS = ["날짜", "환자명", "생년월일", "등록번호", "중증도", "수술법", ""]
+    _COLUMNS = ["날짜", "환자명", "생년월일", "등록번호", "작성자", "중증도 (좌 / 우)", "수술법", ""]
     _SEVERITY_MAP: dict[str, str] = {
         "mild": "경증", "moderate": "중등도", "severe": "중증",
         "경증": "경증", "중등도": "중등도", "중증": "중증",
-    }
-    _SEVERITY_COLORS: dict[str, str] = {
-        "경증": "#27ae60",
-        "중등도": "#f39c12",
-        "중증": "#e74c3c",
     }
 
     def __init__(self, doctor_id: str = "", parent: QWidget | None = None) -> None:
@@ -50,98 +118,172 @@ class DashboardWidget(QWidget):
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.setSpacing(20)
 
         # ── Header row ───────────────────────────────────────────
         header_row = QHBoxLayout()
-
-        title = QLabel("📋 케이스 대시보드")
-        title.setFont(QFont("맑은 고딕", 18, QFont.Weight.Bold))
-        title.setStyleSheet("color: #2c3e50;")
-        header_row.addWidget(title)
-
+        titles = QVBoxLayout()
+        titles.setSpacing(4)
+        titles.addWidget(theme.label("케이스 대시보드", "title"))
+        self._subtitle = theme.label("저장된 무지외반증 케이스를 확인하고 관리합니다.", "subtitle")
+        titles.addWidget(self._subtitle)
+        header_row.addLayout(titles)
         header_row.addStretch()
 
-        new_case_btn = QPushButton("➕ 새 케이스")
-        new_case_btn.setProperty("class", "success")
-        new_case_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 10px 24px;
-                border-radius: 8px;
-            }
-            QPushButton:hover { background-color: #219a52; }
-        """)
+        refresh_btn = QPushButton("  새로고침")
+        theme.set_variant(refresh_btn, "secondary")
+        refresh_btn.setIcon(theme.icon("refresh", theme.TEXT_2, 16))
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self.refresh_data)
+        header_row.addWidget(refresh_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        header_row.addSpacing(8)
+
+        new_case_btn = QPushButton("  새 케이스")
+        new_case_btn.setIcon(theme.icon("plus", "#FFFFFF", 16))
+        new_case_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         new_case_btn.clicked.connect(self.new_case_requested.emit)
-        header_row.addWidget(new_case_btn)
+        header_row.addWidget(new_case_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         layout.addLayout(header_row)
 
-        # ── Search bar ───────────────────────────────────────────
-        search_row = QHBoxLayout()
+        # ── KPI cards ────────────────────────────────────────────
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(16)
+        self._stat_total = _StatCard("전체 케이스", theme.PRIMARY)
+        self._stat_month = _StatCard("이번 달", "#8B7CFF")
+        self._stat_sent = _StatCard("알림톡 발송", theme.SUCCESS)
+        self._stat_severe = _StatCard("중증 포함", theme.DANGER)
+        for c in (self._stat_total, self._stat_month, self._stat_sent, self._stat_severe):
+            stats_row.addWidget(c, 1)
+        layout.addLayout(stats_row)
+
+        # ── Table card ───────────────────────────────────────────
+        table_card = theme.card()
+        tc_ly = QVBoxLayout(table_card)
+        tc_ly.setContentsMargins(0, 0, 0, 0)
+        tc_ly.setSpacing(0)
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(20, 16, 20, 12)
+        toolbar.addWidget(theme.label("케이스 목록", "section"))
+        toolbar.addSpacing(8)
+        self._count_label = theme.label("0건", "caption")
+        toolbar.addWidget(self._count_label)
+        toolbar.addStretch()
 
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("🔍 환자명, 등록번호로 검색...")
-        self._search_input.setMinimumHeight(38)
-        self._search_input.setMaximumWidth(400)
+        self._search_input.setPlaceholderText("환자명, 등록번호, 수술법, 작성자 검색")
+        self._search_input.addAction(
+            theme.icon("search", theme.MUTED, 16), QLineEdit.ActionPosition.LeadingPosition,
+        )
+        self._search_input.setClearButtonEnabled(True)
+        self._search_input.setMinimumHeight(36)
+        self._search_input.setFixedWidth(300)
         self._search_input.textChanged.connect(self._apply_filter)
-        search_row.addWidget(self._search_input)
+        toolbar.addWidget(self._search_input)
+        toolbar.addSpacing(10)
+        self._mine_only = QCheckBox("내 케이스만")
+        self._mine_only.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mine_only.toggled.connect(lambda _: self._apply_filter(self._search_input.text()))
+        toolbar.addWidget(self._mine_only)
+        tc_ly.addLayout(toolbar)
 
-        search_row.addStretch()
-
-        self._count_label = QLabel("총 0건")
-        self._count_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
-        search_row.addWidget(self._count_label)
-
-        layout.addLayout(search_row)
-
-        # ── Table ────────────────────────────────────────────────
         self._table = QTableWidget()
         self._table.setColumnCount(len(self._COLUMNS))
         self._table.setHorizontalHeaderLabels(self._COLUMNS)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setAlternatingRowColors(True)
-        self._table.setStyleSheet("""
-            QTableWidget {
-                alternate-background-color: #fafbfc;
-            }
-        """)
+        self._table.setShowGrid(False)
+        self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._table.setMouseTracking(True)
         self._table.verticalHeader().setVisible(False)
-        self._table.verticalHeader().setDefaultSectionSize(36)
+        self._table.verticalHeader().setDefaultSectionSize(48)
         self._table.setSortingEnabled(True)
         self._table.doubleClicked.connect(self._on_row_double_clicked)
+        self._table.setItemDelegateForColumn(5, _SeverityDelegate(self._table))
+        self._table.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._table.setToolTip("더블클릭하여 케이스 열기")
 
-        # Column stretch
         header = self._table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # 날짜
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # 환자명
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # 생년월일
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # 등록번호
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # 중증도
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)           # 수술법
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)             # 삭제
-        header.resizeSection(6, 70)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.setHighlightSections(False)
+        header.setMinimumSectionSize(80)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 170)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(7, 104)
 
-        layout.addWidget(self._table)
+        tc_ly.addWidget(self._table, 1)
+
+        # Empty state
+        self._empty = QWidget()
+        em_ly = QVBoxLayout(self._empty)
+        em_ly.setContentsMargins(0, 48, 0, 56)
+        em_ly.setSpacing(6)
+        em_icon = QLabel()
+        em_icon.setPixmap(theme.icon("folder", theme.MUTED, 36).pixmap(36, 36))
+        em_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        em_ly.addWidget(em_icon)
+        self._empty_title = theme.label("아직 저장된 케이스가 없습니다", "section")
+        self._empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        em_ly.addWidget(self._empty_title)
+        self._empty_hint = theme.label("‘새 케이스’를 눌러 X-ray 측정을 시작하세요.", "caption")
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        em_ly.addWidget(self._empty_hint)
+        self._empty.setVisible(False)
+        tc_ly.addWidget(self._empty)
+
+        layout.addWidget(table_card, 1)
 
     # ── Data ────────────────────────────────────────────────────
 
     def refresh_data(self) -> None:
-        """Reload case list from database."""
+        """Reload case list from the server."""
+        from desktop.core import api_client
         try:
-            from desktop.core.database import get_all_cases
-            self._case_data = get_all_cases()
-        except ImportError:
-            # Demo data when core module not available
-            self._case_data = self._demo_data()
+            self._case_data = api_client.list_cases()
+        except api_client.ApiError as exc:
+            self._case_data = []
+            self._subtitle.setText(f"케이스 목록을 불러오지 못했습니다: {exc.message}")
+        else:
+            self._subtitle.setText("저장된 무지외반증 케이스를 확인하고 관리합니다. 다른 선생님의 케이스는 읽기 전용입니다.")
 
-        self._populate_table(self._case_data)
+        self._update_stats(self._case_data)
+        self._apply_filter(self._search_input.text())
+
+    def _update_stats(self, data: list[dict]) -> None:
+        now = datetime.now()
+        month = 0
+        sent = 0
+        severe = 0
+        for c in data:
+            d = c.get("createdAt")
+            if hasattr(d, "year") and d.year == now.year and d.month == now.month:
+                month += 1
+            if c.get("alimtalkSent"):
+                sent += 1
+            l_sev, r_sev = self._extract_bilateral(c, "severity")
+            sevs = {self._SEVERITY_MAP.get(v, v) for v in (l_sev, r_sev, c.get("severity") or "")}
+            if "중증" in sevs:
+                severe += 1
+        total = len(data)
+        self._stat_total.value.setText(f"{total:,}")
+        self._stat_total.hint.setText("누적 저장 건수")
+        self._stat_month.value.setText(f"{month:,}")
+        self._stat_month.hint.setText(f"{now.year}년 {now.month}월 신규")
+        self._stat_sent.value.setText(f"{sent:,}")
+        rate = f"{sent / total * 100:.0f}%" if total else "-"
+        self._stat_sent.hint.setText(f"발송률 {rate}")
+        self._stat_severe.value.setText(f"{severe:,}")
+        self._stat_severe.hint.setText("한쪽 이상 중증 판정")
 
     def _populate_table(self, data: list[dict]) -> None:
         """Fill the table with given case records."""
@@ -149,30 +291,47 @@ class DashboardWidget(QWidget):
         self._table.setRowCount(0)
         self._table.setRowCount(len(data))
 
+        bold = theme.font(10, QFont.Weight.DemiBold)
+        muted = QColor(theme.TEXT_2)
+
         for row, case in enumerate(data):
             # 날짜 (DB: createdAt datetime or demo: date string)
             raw_date = case.get("createdAt") or case.get("date", "")
             if hasattr(raw_date, "strftime"):
-                date_str = raw_date.strftime("%Y-%m-%d %H:%M")
+                date_str = raw_date.strftime("%Y-%m-%d  %H:%M")
             else:
                 date_str = str(raw_date) if raw_date else ""
             date_item = QTableWidgetItem(date_str)
             date_item.setData(Qt.ItemDataRole.UserRole, case.get("id", row))
+            date_item.setForeground(muted)
             self._table.setItem(row, 0, date_item)
 
             # 환자명 (DB: patientName)
             name = case.get("patientName") or case.get("patient_name", "")
-            self._table.setItem(row, 1, QTableWidgetItem(name))
+            name_item = QTableWidgetItem(name)
+            name_item.setFont(bold)
+            self._table.setItem(row, 1, name_item)
 
             # 생년월일 (DB: patientBirth)
             birth = case.get("patientBirth") or case.get("birth_date", "")
-            self._table.setItem(row, 2, QTableWidgetItem(str(birth)))
+            birth_item = QTableWidgetItem(str(birth))
+            birth_item.setForeground(muted)
+            self._table.setItem(row, 2, birth_item)
 
             # 등록번호 (DB: patientRegNo)
             reg_no = case.get("patientRegNo", "")
-            self._table.setItem(row, 3, QTableWidgetItem(str(reg_no)))
+            reg_item = QTableWidgetItem(str(reg_no))
+            reg_item.setForeground(muted)
+            self._table.setItem(row, 3, reg_item)
 
-            # 중증도 (bilateral: 좌/우)
+            # 작성자
+            is_mine = case.get("doctorId") == self._doctor_id
+            author = case.get("doctorName") or ""
+            author_item = QTableWidgetItem(f"{author} (나)" if is_mine else author)
+            author_item.setForeground(QColor(theme.PRIMARY) if is_mine else muted)
+            self._table.setItem(row, 4, author_item)
+
+            # 중증도 (bilateral: 좌/우) — painted as pills by _SeverityDelegate
             left_sev_raw, right_sev_raw = self._extract_bilateral(case, "severity")
             left_sev = self._SEVERITY_MAP.get(left_sev_raw, left_sev_raw)
             right_sev = self._SEVERITY_MAP.get(right_sev_raw, right_sev_raw)
@@ -185,17 +344,12 @@ class DashboardWidget(QWidget):
             else:
                 fallback = case.get("severity", "")
                 sev_text = self._SEVERITY_MAP.get(fallback, fallback)
-            sev_item = QTableWidgetItem(sev_text)
-            primary_sev = left_sev or right_sev or self._SEVERITY_MAP.get(case.get("severity", ""), "")
-            color = self._SEVERITY_COLORS.get(primary_sev, "#7f8c8d")
-            sev_item.setForeground(QColor(color))
-            sev_item.setFont(QFont("맑은 고딕", 10, QFont.Weight.Bold))
-            self._table.setItem(row, 4, sev_item)
+            self._table.setItem(row, 5, QTableWidgetItem(sev_text))
 
             # 수술법 (bilateral: 좌/우)
             left_surg, right_surg = self._extract_bilateral(case, "surgery")
             if left_surg and right_surg:
-                surgery_text = f"{left_surg} / {right_surg}"
+                surgery_text = f"{left_surg}  /  {right_surg}"
             elif left_surg:
                 surgery_text = left_surg
             elif right_surg:
@@ -207,38 +361,61 @@ class DashboardWidget(QWidget):
                     or case.get("surgery", "")
                     or ""
                 )
-            self._table.setItem(row, 5, QTableWidgetItem(surgery_text))
+            self._table.setItem(row, 6, QTableWidgetItem(surgery_text))
 
-            # 삭제 버튼
+            # 삭제 버튼 (본인 케이스만)
             case_id = case.get("id", "")
+            if not is_mine:
+                lock = QLabel("읽기 전용")
+                lock.setStyleSheet(f"color: {theme.MUTED}; font-size: 11px; padding-right: 16px;")
+                lock.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self._table.setCellWidget(row, 7, lock)
+                continue
+            holder = QWidget()
+            h_ly = QHBoxLayout(holder)
+            h_ly.setContentsMargins(0, 0, 12, 0)
+            h_ly.addStretch()
             del_btn = QPushButton("삭제")
-            del_btn.setFixedSize(60, 26)
-            del_btn.setStyleSheet(
-                "background-color: #e74c3c; color: white; font-size: 11px; "
-                "padding: 0px; border-radius: 4px; border: none; "
-                "min-height: 0px; max-height: 26px; min-width: 0px;"
-            )
+            theme.set_variant(del_btn, "danger-ghost")
+            del_btn.setIcon(theme.icon("trash", theme.MUTED, 14))
+            del_btn.setMinimumWidth(72)
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.clicked.connect(
                 lambda checked, cid=str(case_id), nm=name: self._on_delete_clicked(cid, nm)
             )
-            self._table.setCellWidget(row, 6, del_btn)
+            h_ly.addWidget(del_btn)
+            self._table.setCellWidget(row, 7, holder)
 
         self._table.setSortingEnabled(True)
-        self._count_label.setText(f"총 {len(data)}건")
+        self._count_label.setText(f"{len(data)}건")
+
+        has_rows = bool(data)
+        self._table.setVisible(has_rows)
+        self._empty.setVisible(not has_rows)
+        if not has_rows and self._case_data:
+            self._empty_title.setText("검색 결과가 없습니다")
+            self._empty_hint.setText("다른 검색어로 다시 시도해 보세요.")
+        elif not has_rows:
+            self._empty_title.setText("아직 저장된 케이스가 없습니다")
+            self._empty_hint.setText("‘새 케이스’를 눌러 X-ray 측정을 시작하세요.")
 
     # ── Filter ──────────────────────────────────────────────────
 
     def _apply_filter(self, text: str) -> None:
         """Filter table rows by search text."""
         query = text.strip().lower()
+        base = self._case_data
+        if self._mine_only.isChecked():
+            base = [c for c in base if c.get("doctorId") == self._doctor_id]
         if not query:
-            self._populate_table(self._case_data)
+            self._populate_table(base)
             return
 
         filtered = [
             c
-            for c in self._case_data
-            if query in (c.get("patientName") or c.get("patient_name", "")).lower()
+            for c in base
+            if query in (c.get("doctorName") or "").lower()
+            or query in (c.get("patientName") or c.get("patient_name", "")).lower()
             or query in (c.get("finalDecision") or c.get("algorithmResult") or c.get("surgery", "")).lower()
             or query in (c.get("patientRegNo", "")).lower()
         ]
@@ -281,19 +458,14 @@ class DashboardWidget(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        from desktop.core import api_client
         try:
-            from desktop.core.database import delete_case
-            deleted = delete_case(case_id, self._doctor_id)
-            if deleted:
-                self.refresh_data()
-                self.case_deleted.emit()
-            else:
-                msgbox.warning(
-                    self, "삭제 실패",
-                    "본인이 생성한 케이스만 삭제할 수 있습니다.",
-                )
-        except Exception as exc:
-            msgbox.critical(self, "오류", f"삭제 중 오류 발생: {exc}")
+            api_client.delete_case(case_id)
+        except api_client.ApiError as exc:
+            msgbox.warning(self, "삭제 실패", exc.message)
+            return
+        self.refresh_data()
+        self.case_deleted.emit()
 
     # ── Events ──────────────────────────────────────────────────
 
@@ -308,52 +480,3 @@ class DashboardWidget(QWidget):
         case_id = item.data(Qt.ItemDataRole.UserRole)
         if case_id is not None:
             self.case_selected.emit(str(case_id))
-
-    # ── Demo Data ───────────────────────────────────────────────
-
-    @staticmethod
-    def _demo_data() -> list[dict]:
-        return [
-            {
-                "id": 1,
-                "createdAt": "2026-03-10",
-                "patientName": "홍길동",
-                "patientBirth": "1965-04-12",
-                "patientRegNo": "REG-001",
-                "severity": "중등도",
-                "finalDecision": "Scarf 절골술",
-                "alimtalkSent": True,
-                "angleData": json.dumps({
-                    "left_surgery": {"severity": "중등도", "final_decision": "Scarf 절골술"},
-                    "right_surgery": {"severity": "경증", "final_decision": "Chevron 절골술"},
-                }),
-            },
-            {
-                "id": 2,
-                "createdAt": "2026-03-09",
-                "patientName": "김영희",
-                "patientBirth": "1978-11-23",
-                "patientRegNo": "REG-002",
-                "severity": "중증",
-                "finalDecision": "Lapidus 절골술",
-                "alimtalkSent": False,
-                "angleData": json.dumps({
-                    "left_surgery": {"severity": "중증", "final_decision": "Lapidus 절골술"},
-                    "right_surgery": {"severity": "중등도", "final_decision": "Scarf 절골술"},
-                }),
-            },
-            {
-                "id": 3,
-                "createdAt": "2026-03-08",
-                "patientName": "이철수",
-                "patientBirth": "1990-07-05",
-                "patientRegNo": "REG-003",
-                "severity": "경증",
-                "finalDecision": "Chevron 절골술",
-                "alimtalkSent": True,
-                "angleData": json.dumps({
-                    "left_surgery": {"severity": "경증", "final_decision": "Chevron 절골술"},
-                    "right_surgery": {"severity": "경증", "final_decision": "Chevron 절골술"},
-                }),
-            },
-        ]

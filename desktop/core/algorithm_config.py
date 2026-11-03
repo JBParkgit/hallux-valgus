@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 의사별 수술 추천 알고리즘 설정 관리.
-설정은 data/algorithm_config/{doctor_id}.json 에 저장됩니다.
+설정은 서버에 저장되고, 이 PC의 data/algorithm_config/{doctor_id}.json 에 사본이 남습니다.
 """
 
 import json
@@ -9,9 +9,11 @@ import logging
 import os
 from typing import Any
 
+from desktop.core.paths import data_dir
+
 logger = logging.getLogger(__name__)
 
-_CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "algorithm_config")
+_CONFIG_DIR = data_dir("algorithm_config")
 
 
 DEFAULT_SURGERIES = [
@@ -47,34 +49,50 @@ def default_config() -> dict[str, Any]:
     }
 
 
-def load_config(doctor_id: str) -> dict[str, Any]:
-    """의사별 설정 로드. 없으면 기본값 반환."""
+def _local_path(doctor_id: str) -> str:
     os.makedirs(_CONFIG_DIR, exist_ok=True)
-    path = os.path.join(_CONFIG_DIR, f"{doctor_id}.json")
-    if os.path.exists(path):
+    return os.path.join(_CONFIG_DIR, f"{doctor_id}.json")
+
+
+def load_config(doctor_id: str) -> dict[str, Any]:
+    """의사별 설정 로드: 서버 → (실패 시) 이 PC의 사본 → 기본값.
+
+    서버에 저장하므로 어느 PC에서 로그인해도 같은 설정을 씁니다.
+    """
+    saved: dict | None = None
+    try:
+        from desktop.core import api_client
+        if api_client.current_doctor():
+            saved = api_client.get_algorithm_config()
+    except Exception:
+        logger.warning("서버에서 알고리즘 설정을 불러오지 못해 이 PC의 사본을 사용합니다.")
+        saved = None
+
+    path = _local_path(doctor_id)
+    if saved is None and os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-            # Merge with defaults so new keys are always present
-            cfg = default_config()
-            _deep_merge(cfg, saved)
-            return cfg
         except Exception:
             logger.exception("알고리즘 설정 로드 실패: %s", path)
-    return default_config()
+
+    cfg = default_config()
+    if saved:
+        # Merge with defaults so new keys are always present
+        _deep_merge(cfg, saved)
+    return cfg
 
 
 def save_config(doctor_id: str, config: dict[str, Any]) -> None:
-    """의사별 설정 저장."""
-    os.makedirs(_CONFIG_DIR, exist_ok=True)
-    path = os.path.join(_CONFIG_DIR, f"{doctor_id}.json")
+    """의사별 설정 저장: 서버에 저장하고 이 PC에도 사본을 남깁니다."""
+    from desktop.core import api_client
+    api_client.put_algorithm_config(config)  # 실패하면 ApiError → 화면에 표시
+    path = _local_path(doctor_id)
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        logger.info("알고리즘 설정 저장: %s", path)
     except Exception:
-        logger.exception("알고리즘 설정 저장 실패: %s", path)
-        raise
+        logger.exception("알고리즘 설정 사본 저장 실패: %s", path)
 
 
 def _deep_merge(base: dict, override: dict) -> None:

@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.core.algorithm_config import DEFAULT_SURGERIES, default_config, load_config, save_config
-from desktop.ui import msgbox
+from desktop.ui import msgbox, theme
 
 
 class AlgorithmSettingsDialog(QDialog):
@@ -45,17 +45,17 @@ class AlgorithmSettingsDialog(QDialog):
         self.setMinimumSize(580, 680)
 
         outer = QVBoxLayout(self)
-        outer.setSpacing(12)
-        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(8)
+        outer.setContentsMargins(28, 24, 28, 20)
 
         # Header
-        header = QLabel(f"{self._doctor_name} 선생님의 수술 추천 알고리즘 설정")
-        header.setFont(QFont("맑은 고딕", 13, QFont.Weight.Bold))
-        header.setStyleSheet("color: #2c3e50;")
+        header = theme.label("알고리즘 설정", "title")
         outer.addWidget(header)
 
-        desc = QLabel("아래 값들을 수정하여 환자별 수술 추천 기준을 조정할 수 있습니다.")
-        desc.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        desc = theme.label(
+            f"{self._doctor_name} 선생님의 수술 추천 기준입니다. 값을 수정해 환자별 추천 결과를 조정할 수 있습니다.",
+            "subtitle",
+        )
         desc.setWordWrap(True)
         outer.addWidget(desc)
 
@@ -64,8 +64,10 @@ class AlgorithmSettingsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         content = QWidget()
+        content.setObjectName("scrollContent")
         self._form_layout = QVBoxLayout(content)
-        self._form_layout.setSpacing(12)
+        self._form_layout.setContentsMargins(0, 0, 8, 0)
+        self._form_layout.setSpacing(4)
 
         self._build_surgery_management_section()
         self._build_severity_section()
@@ -79,31 +81,26 @@ class AlgorithmSettingsDialog(QDialog):
 
         # Buttons
         btn_row = QHBoxLayout()
-        btn_row.addStretch()
+        btn_row.setContentsMargins(0, 12, 0, 0)
+        btn_row.setSpacing(8)
 
         reset_btn = QPushButton("기본값으로 초기화")
-        reset_btn.setStyleSheet(
-            "padding: 8px 16px; background-color: #e74c3c; color: white; "
-            "border-radius: 6px; font-weight: bold;"
-        )
+        theme.set_variant(reset_btn, "danger-ghost")
         reset_btn.clicked.connect(self._reset_to_default)
         btn_row.addWidget(reset_btn)
-
-        save_btn = QPushButton("저장")
-        save_btn.setStyleSheet(
-            "padding: 8px 24px; background-color: #27ae60; color: white; "
-            "border-radius: 6px; font-weight: bold; font-size: 13px;"
-        )
-        save_btn.clicked.connect(self._save)
-        btn_row.addWidget(save_btn)
+        btn_row.addStretch()
 
         cancel_btn = QPushButton("취소")
-        cancel_btn.setStyleSheet(
-            "padding: 8px 16px; background-color: #95a5a6; color: white; "
-            "border-radius: 6px;"
-        )
+        theme.set_variant(cancel_btn, "secondary")
+        cancel_btn.setMinimumWidth(90)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
+
+        save_btn = QPushButton("저장")
+        save_btn.setMinimumWidth(110)
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self._save)
+        btn_row.addWidget(save_btn)
 
         outer.addLayout(btn_row)
 
@@ -147,11 +144,10 @@ class AlgorithmSettingsDialog(QDialog):
 
     def _build_surgery_management_section(self) -> None:
         group = QGroupBox("수술명 관리")
-        group.setFont(QFont("맑은 고딕", 11, QFont.Weight.Bold))
         ly = QVBoxLayout(group)
 
         info = QLabel("수술명을 추가, 수정, 삭제할 수 있습니다. 여기서 관리하는 수술명이 아래 매핑에 사용됩니다.")
-        info.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        info.setProperty("role", "caption")
         info.setWordWrap(True)
         ly.addWidget(info)
 
@@ -165,26 +161,20 @@ class AlgorithmSettingsDialog(QDialog):
 
         btn_row = QHBoxLayout()
         add_btn = QPushButton("+ 수술 추가")
-        add_btn.setStyleSheet(
-            "padding: 4px 12px; background-color: #3498db; color: white; "
-            "border-radius: 4px; font-size: 11px;"
-        )
+        add_btn.setProperty("size", "sm")
+        theme.set_variant(add_btn, "soft")
         add_btn.clicked.connect(self._add_surgery_row)
         btn_row.addWidget(add_btn)
 
         del_btn = QPushButton("- 선택 삭제")
-        del_btn.setStyleSheet(
-            "padding: 4px 12px; background-color: #e74c3c; color: white; "
-            "border-radius: 4px; font-size: 11px;"
-        )
+        del_btn.setProperty("size", "sm")
+        theme.set_variant(del_btn, "danger-ghost")
         del_btn.clicked.connect(self._delete_surgery_row)
         btn_row.addWidget(del_btn)
 
         reset_btn = QPushButton("기본 수술 복원")
-        reset_btn.setStyleSheet(
-            "padding: 4px 12px; background-color: #95a5a6; color: white; "
-            "border-radius: 4px; font-size: 11px;"
-        )
+        reset_btn.setProperty("size", "sm")
+        theme.set_variant(reset_btn, "secondary")
         reset_btn.clicked.connect(self._reset_surgery_list)
         btn_row.addWidget(reset_btn)
 
@@ -241,7 +231,6 @@ class AlgorithmSettingsDialog(QDialog):
 
     def _build_severity_section(self) -> None:
         group = QGroupBox("중증도 분류 기준")
-        group.setFont(QFont("맑은 고딕", 11, QFont.Weight.Bold))
         form = QFormLayout(group)
         form.setSpacing(8)
 
@@ -250,7 +239,7 @@ class AlgorithmSettingsDialog(QDialog):
             "중등도: HVA ≥ 중등도HVA OR IMA ≥ 중등도IMA\n"
             "중증: HVA > 중증HVA OR IMA > 중증IMA"
         )
-        info.setStyleSheet("color: #7f8c8d; font-size: 11px; padding: 4px;")
+        info.setProperty("role", "caption")
         form.addRow(info)
 
         self._moderate_hva = QDoubleSpinBox()
@@ -283,7 +272,6 @@ class AlgorithmSettingsDialog(QDialog):
 
     def _build_surgery_map_section(self) -> None:
         group = QGroupBox("중증도별 수술 매핑")
-        group.setFont(QFont("맑은 고딕", 11, QFont.Weight.Bold))
         form = QFormLayout(group)
         form.setSpacing(8)
 
@@ -311,7 +299,6 @@ class AlgorithmSettingsDialog(QDialog):
 
     def _build_dmaa_section(self) -> None:
         group = QGroupBox("DMAA 보조 수술 기준")
-        group.setFont(QFont("맑은 고딕", 11, QFont.Weight.Bold))
         form = QFormLayout(group)
 
         self._dmaa_threshold = QDoubleSpinBox()
@@ -331,7 +318,6 @@ class AlgorithmSettingsDialog(QDialog):
 
     def _build_age_section(self) -> None:
         group = QGroupBox("고령 환자 경고")
-        group.setFont(QFont("맑은 고딕", 11, QFont.Weight.Bold))
         form = QFormLayout(group)
 
         self._age_warning = QSpinBox()

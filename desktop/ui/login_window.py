@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QKeyEvent
+from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -15,110 +16,96 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from desktop.ui import theme
+
 
 class LoginWindow(QDialog):
     """Centered login dialog with hospital branding."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._logged_in_doctor: str = ""
+        self._logged_in_doctor: dict = {}
+        self._settings = QSettings("달려라병원", "HalluxValgus")
         self._init_ui()
-        self._try_auto_login()
+        self._restore_username()
 
     def _init_ui(self) -> None:
         self.setWindowTitle("달려라병원 - 무지외반증 수술 결정 지원 시스템")
-        self.setFixedSize(420, 520)
+        self.setFixedSize(460, 600)
         self.setWindowFlags(
             Qt.WindowType.Dialog
             | Qt.WindowType.MSWindowsFixedSizeDialogHint
         )
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(48, 40, 48, 40)
-        layout.setSpacing(12)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 28, 28, 20)
+        outer.setSpacing(0)
 
-        # Hospital branding
-        layout.addSpacing(16)
+        panel = theme.card(shadow=True)
+        outer.addWidget(panel, 1)
 
-        hospital_icon = QLabel("🏥")
-        hospital_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hospital_icon.setStyleSheet("font-size: 48px;")
-        layout.addWidget(hospital_icon)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(36, 36, 36, 32)
+        layout.setSpacing(0)
 
-        hospital_name = QLabel("달려라병원")
-        hospital_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hospital_name.setFont(QFont("맑은 고딕", 22, QFont.Weight.Bold))
-        hospital_name.setStyleSheet("color: #2c3e50; margin-bottom: 4px;")
+        # ── Brand ────────────────────────────────────────────────
+        logo = QLabel()
+        logo.setPixmap(theme.logo_pixmap(52))
+        logo.setFixedSize(52, 52)
+        layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addSpacing(20)
+
+        hospital_name = theme.label("달려라병원", "title")
         layout.addWidget(hospital_name)
+        layout.addSpacing(4)
 
-        subtitle = QLabel("무지외반증 수술 결정 지원 시스템")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet("color: #7f8c8d; font-size: 13px; margin-bottom: 24px;")
+        subtitle = theme.label("무지외반증 수술 결정 지원 시스템", "subtitle")
         layout.addWidget(subtitle)
+        layout.addSpacing(28)
 
-        # Divider
-        divider = QWidget()
-        divider.setFixedHeight(1)
-        divider.setStyleSheet("background-color: #dce1e8;")
-        layout.addWidget(divider)
-        layout.addSpacing(20)
-
-        # Username
-        username_label = QLabel("아이디")
-        username_label.setStyleSheet("font-weight: bold; color: #34495e; font-size: 13px;")
-        layout.addWidget(username_label)
-
+        # ── Username ─────────────────────────────────────────────
+        layout.addWidget(theme.label("아이디", "field"))
+        layout.addSpacing(6)
         self._username_input = QLineEdit()
-        self._username_input.setPlaceholderText("사용자 아이디를 입력하세요")
-        self._username_input.setMinimumHeight(40)
+        self._username_input.setPlaceholderText("사용자 아이디")
+        self._username_input.setMinimumHeight(42)
+        self._username_input.addAction(
+            theme.icon("user", theme.MUTED), QLineEdit.ActionPosition.LeadingPosition,
+        )
         layout.addWidget(self._username_input)
+        layout.addSpacing(14)
 
-        layout.addSpacing(8)
-
-        # Password
-        password_label = QLabel("비밀번호")
-        password_label.setStyleSheet("font-weight: bold; color: #34495e; font-size: 13px;")
-        layout.addWidget(password_label)
-
+        # ── Password ─────────────────────────────────────────────
+        layout.addWidget(theme.label("비밀번호", "field"))
+        layout.addSpacing(6)
         self._password_input = QLineEdit()
-        self._password_input.setPlaceholderText("비밀번호를 입력하세요")
+        self._password_input.setPlaceholderText("비밀번호")
         self._password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._password_input.setMinimumHeight(40)
+        self._password_input.setMinimumHeight(42)
         layout.addWidget(self._password_input)
+        layout.addSpacing(22)
 
-        layout.addSpacing(20)
-
-        # Login button
+        # ── Login button ─────────────────────────────────────────
         self._login_btn = QPushButton("로그인")
-        self._login_btn.setMinimumHeight(44)
-        self._login_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                font-size: 15px;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover { background-color: #2980b9; }
-            QPushButton:pressed { background-color: #2472a4; }
-        """)
+        self._login_btn.setProperty("size", "lg")
+        self._login_btn.setMinimumHeight(46)
+        self._login_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._login_btn.clicked.connect(self._on_login)
         layout.addWidget(self._login_btn)
+        layout.addSpacing(10)
 
-        # Error message area
-        self._error_label = QLabel("")
+        self._error_label = theme.label("", "error")
         self._error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_label.setStyleSheet("color: #e74c3c; font-size: 12px;")
         self._error_label.setWordWrap(True)
         layout.addWidget(self._error_label)
 
         layout.addStretch()
 
         # Footer
-        footer = QLabel("v1.0 | 달려라병원 정보시스템팀")
+        footer = theme.label("v1.0  ·  달려라병원 정보시스템팀", "caption")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("color: #bdc3c7; font-size: 11px;")
-        layout.addWidget(footer)
+        outer.addSpacing(14)
+        outer.addWidget(footer)
 
         # Focus username on open
         self._username_input.setFocus()
@@ -133,10 +120,19 @@ class LoginWindow(QDialog):
         else:
             super().keyPressEvent(event)
 
+    def _restore_username(self) -> None:
+        """Pre-fill the last used username (never the password)."""
+        last = str(self._settings.value("last_username", "") or "")
+        if last:
+            self._username_input.setText(last)
+            self._password_input.setFocus()
+
     def _on_login(self) -> None:
-        """Validate credentials and open main window."""
+        """Log in through the server and open the main window."""
+        from desktop.core import api_client
+
         username = self._username_input.text().strip()
-        password = self._password_input.text().strip()
+        password = self._password_input.text()
 
         if not username or not password:
             self._error_label.setText("아이디와 비밀번호를 모두 입력해 주세요.")
@@ -145,67 +141,22 @@ class LoginWindow(QDialog):
         self._error_label.setText("")
         self._login_btn.setEnabled(False)
         self._login_btn.setText("로그인 중...")
+        QApplication.processEvents()
 
         try:
-            doctor = self._authenticate(username, password)
-        except Exception as exc:
-            self._error_label.setText(f"로그인 오류: {exc}")
+            doctor = api_client.login(username, password)
+        except api_client.ApiError as exc:
+            self._error_label.setText(exc.message)
             self._login_btn.setEnabled(True)
             self._login_btn.setText("로그인")
+            if exc.status == 401:
+                self._password_input.clear()
+                self._password_input.setFocus()
             return
 
-        if doctor:
-            self._logged_in_doctor = doctor
-            self._open_main_window()
-        else:
-            self._error_label.setText("아이디 또는 비밀번호가 올바르지 않습니다.")
-            self._login_btn.setEnabled(True)
-            self._login_btn.setText("로그인")
-            self._password_input.clear()
-            self._password_input.setFocus()
-
-    def _authenticate(self, username: str, password: str) -> dict | None:
-        """Authenticate user via the database module.
-
-        Returns the doctor dict on success, None on failure.
-        """
-        try:
-            from desktop.core.database import authenticate
-            result = authenticate(username, password)
-            if result:
-                return result
-        except Exception:
-            pass
-        # Fallback: try to get first doctor from DB
-        if username == "admin" and password == "admin":
-            try:
-                from desktop.core.database import _get_conn, _put_conn
-                import psycopg2.extras
-                conn = _get_conn()
-                try:
-                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                        cur.execute('SELECT * FROM "Doctor" LIMIT 1')
-                        doctor = cur.fetchone()
-                    if doctor:
-                        return dict(doctor)
-                finally:
-                    _put_conn(conn)
-            except Exception:
-                pass
-            return {"id": "demo-doctor-id", "name": "김의사", "hospital": "달려라병원"}
-        return None
-
-    def _try_auto_login(self) -> None:
-        """Attempt auto-login with admin credentials."""
-        try:
-            doctor = self._authenticate("admin", "admin")
-            if doctor:
-                self._logged_in_doctor = doctor
-                self._auto_login_success = True
-                return
-        except Exception:
-            pass
-        self._auto_login_success = False
+        self._settings.setValue("last_username", username)
+        self._logged_in_doctor = doctor
+        self._open_main_window()
 
     def _open_main_window(self) -> None:
         """Open the main application window and close login."""

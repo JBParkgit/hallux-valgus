@@ -18,10 +18,12 @@ import psycopg2.pool
 import psycopg2.extras
 from dotenv import load_dotenv
 
+from desktop.core.paths import app_root
+
 logger = logging.getLogger(__name__)
 
 # 프로젝트 루트의 .env 파일 로드
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_PROJECT_ROOT = app_root()
 load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
 # 커넥션 풀 (모듈 레벨 싱글톤)

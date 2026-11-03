@@ -17,7 +17,7 @@ DEFAULT_PATIENT_FILE = r"C:\DreamSoft\SMS_Patient.txt"
 def load_patients(filepath: str = DEFAULT_PATIENT_FILE) -> list[dict]:
     """환자 파일에서 전체 환자 목록을 로드합니다.
 
-    파일 형식: 생년월일,전화,이름,등록번호,질병코드 (cp949 인코딩)
+    파일 형식: 생년월일,전화,이름,등록번호[,질병코드] (cp949 인코딩)
 
     Args:
         filepath: SMS_Patient.txt 파일 경로
@@ -36,7 +36,8 @@ def load_patients(filepath: str = DEFAULT_PATIENT_FILE) -> list[dict]:
                     continue
 
                 parts = line.split(",")
-                if len(parts) < 5:
+                # 질병코드(5번째)는 없을 수 있음 — DreamSoft 버전에 따라 4필드로 저장됨
+                if len(parts) < 4:
                     logger.warning(
                         "파싱 오류 (라인 %d): 필드 부족 - '%s'", line_no, line
                     )
@@ -54,7 +55,7 @@ def load_patients(filepath: str = DEFAULT_PATIENT_FILE) -> list[dict]:
                     "phone": parts[1].strip(),
                     "name": parts[2].strip(),
                     "reg_no": parts[3].strip(),
-                    "disease_code": parts[4].strip(),
+                    "disease_code": parts[4].strip() if len(parts) > 4 else "",
                     "age": age,
                 }
                 patients.append(patient)

@@ -49,3 +49,14 @@ __pycache__/
 
 # claude code local settings
 .claude/
+
+# server (secrets / venv)
+server/.env
+server/.venv/
+
+# pyinstaller
+/dist-desktop/
+/build-desktop/
+
+# local data (X-ray copies, per-PC settings) — never commit patient images
+/data/
