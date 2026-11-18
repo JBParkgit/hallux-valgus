@@ -1,7 +1,7 @@
 /**
  * /guide/ — 환자용 '측정 각도 안내' 문서.
  * 수술 안내서(리포트)의 X-ray 아래 링크로 연결된다 (/guide/?r={hash} 이면 돌아가기 링크 표시).
- * 그림은 실제 X-ray가 아닌 단순화한 모식도다.
+ * 그림은 실제 X-ray가 아닌 왼발 뼈 일러스트다 (public/guide/foot-left.jpg).
  */
 import type { Metadata } from "next";
 import { BackToReport } from "./BackToReport";
@@ -12,69 +12,57 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/* ─── 모식도 ─── */
+/* ─── 그림: 왼발 뼈 일러스트 + 측정선 ─── */
 
 type P = [number, number];
 const AXIS = "#d4a90a"; // 기준선(제1중족골 축) — 밝은 배경용 노랑
 const COLOR = { HVA: "#e5484d", IMA: "#2f6fe0", DMAA: "#13a37a" } as const;
 
-// 오른발을 위(발가락 쪽)에서 본 정면 모식도 — 엄지는 왼쪽, 바깥쪽은 오른쪽
-const M1: [P, P] = [[132, 256], [109, 154]]; // 제1중족골 (아래=몸쪽, 위=발가락쪽)
-const P1: [P, P] = [[106, 143], [132, 86]];  // 엄지 첫마디뼈(근위지골)
-const M2: [P, P] = [[168, 262], [166, 151]]; // 제2중족골
+// public/guide/foot-left.jpg (550×750) 위의 좌표 — 왼발을 위(발등 쪽)에서 본 그림
+const IMG = { src: "/guide/foot-left.jpg", w: 550, h: 750 };
+const M1: [P, P] = [[348, 550], [437, 355]];  // 제1중족골 축 (몸쪽 → 발가락쪽)
+const P1: [P, P] = [[408, 292], [366, 160]];  // 엄지 첫마디뼈(근위지골) 축
+const M2: [P, P] = [[262, 670], [292, 312]];  // 제2중족골 축
+const ART: [P, P] = [[388, 318], [482, 305]]; // 제1중족골 머리의 관절면 양 끝
 
 function ext([a, b]: [P, P], k: number): [P, P] {
   const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
   return [[a[0] - (dx / L) * k, a[1] - (dy / L) * k], [b[0] + (dx / L) * k, b[1] + (dy / L) * k]];
 }
 
-function Bone({ seg, w }: { seg: [P, P]; w: number }) {
-  return <line x1={seg[0][0]} y1={seg[0][1]} x2={seg[1][0]} y2={seg[1][1]} stroke="#e5e7eb" strokeWidth={w} strokeLinecap="round" />;
-}
-
-function Axis({ seg, color, dashed = false }: { seg: [P, P]; color: string; dashed?: boolean }) {
-  const [a, b] = ext(seg, 18);
-  return (
-    <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={color} strokeWidth={3} strokeLinecap="round"
-      strokeDasharray={dashed ? "5 4" : undefined} />
-  );
-}
-
-/** 원위 관절면 선: 제1중족골 머리 끝을 가로지르는 짧은 선 (축의 수직에서 tilt 도 기울어짐) */
-function articularLine(tilt: number): [P, P] {
+/** 관절면 중심을 지나며 기준선(M1)에 수직인 선 — DMAA 의 기준 */
+function perpendicularAtHead(): [P, P] {
   const [a, b] = M1;
   const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
-  const ux = dx / L, uy = dy / L;
-  const th = ((90 - tilt) * Math.PI) / 180;
-  const vx = ux * Math.cos(th) - uy * Math.sin(th), vy = ux * Math.sin(th) + uy * Math.cos(th);
-  const c: P = [b[0] + ux * 8, b[1] + uy * 8];
-  return [[c[0] - vx * 22, c[1] - vy * 22], [c[0] + vx * 22, c[1] + vy * 22]];
+  const nx = -dy / L, ny = dx / L;
+  const c: P = [(ART[0][0] + ART[1][0]) / 2, (ART[0][1] + ART[1][1]) / 2];
+  return [[c[0] - nx * 62, c[1] - ny * 62], [c[0] + nx * 62, c[1] + ny * 62]];
 }
 
-function perpendicularAtHead(): [P, P] {
-  return articularLine(0);
+function Line({ seg, color, k = 30, dashed = false }: { seg: [P, P]; color: string; k?: number; dashed?: boolean }) {
+  const [a, b] = ext(seg, k);
+  return (
+    <g>
+      <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="white" strokeWidth={9} strokeLinecap="round" opacity={dashed ? 0 : 0.7} />
+      <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={color} strokeWidth={5} strokeLinecap="round"
+        strokeDasharray={dashed ? "12 9" : undefined} />
+      {!dashed && seg.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={7} fill={color} stroke="white" strokeWidth={2} />)}
+    </g>
+  );
 }
 
 function FootDiagram({ show }: { show: "axis" | "HVA" | "IMA" | "DMAA" }) {
   return (
-    <svg viewBox="40 30 190 245" className="w-full max-w-[220px] mx-auto block" role="img"
-      aria-label={`${show} 측정 모식도`}>
-      {/* 뼈 (모식) */}
-      <Bone seg={M1} w={20} />
-      <Bone seg={P1} w={16} />
-      <Bone seg={[[134, 80], [147, 48]]} w={14} />
-      <Bone seg={M2} w={14} />
-      <Bone seg={[[166, 140], [165, 92]]} w={11} />
-      <Bone seg={[[198, 262], [204, 160]]} w={12} />
-
-      {/* 기준선은 모든 그림에 */}
-      <Axis seg={M1} color={AXIS} />
-      {show === "HVA" && <Axis seg={P1} color={COLOR.HVA} />}
-      {show === "IMA" && <Axis seg={M2} color={COLOR.IMA} />}
+    <svg viewBox={`0 0 ${IMG.w} ${IMG.h}`} className="w-full max-w-[320px] mx-auto block rounded-xl" role="img"
+      aria-label={`${show === "axis" ? "기준선" : show} 측정 그림`}>
+      <image href={IMG.src} x={0} y={0} width={IMG.w} height={IMG.h} />
+      <Line seg={M1} color={AXIS} />
+      {show === "HVA" && <Line seg={P1} color={COLOR.HVA} />}
+      {show === "IMA" && <Line seg={M2} color={COLOR.IMA} />}
       {show === "DMAA" && (
         <>
-          <Axis seg={perpendicularAtHead()} color="#9ca3af" dashed />
-          <Axis seg={articularLine(14)} color={COLOR.DMAA} />
+          <Line seg={perpendicularAtHead()} color="#6b7280" k={0} dashed />
+          <Line seg={ART} color={COLOR.DMAA} k={22} />
         </>
       )}
     </svg>
@@ -143,7 +131,7 @@ export default function GuidePage() {
             <div className="mt-3 bg-gray-50 border border-gray-100 rounded-2xl p-3">
               <FootDiagram show="axis" />
               <p className="text-[11px] text-gray-400 text-center mt-1">
-                오른발 모식도 · 노란 선이 기준선(제1중족골 축) · 실제 X-ray가 아닌 그림입니다
+                왼발 뼈 그림 · 노란 선이 기준선(제1중족골 축) · 실제 X-ray가 아닌 그림입니다
               </p>
             </div>
             <nav className="mt-3 flex gap-2 text-[12px] font-semibold">
