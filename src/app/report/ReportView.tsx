@@ -86,7 +86,16 @@ const SEVERITY_KO_MAP: Record<string, keyof typeof SEVERITY_CONFIG> = {
   "중증": "severe",
 };
 
+/** 같은 수술의 다른 이름 → SURGERY_INFO 의 이름 */
+const SURGERY_ALIASES: Record<string, string> = {
+  "핀홀교정술": "핀홀 무지외반증 교정술",
+};
+
 const SURGERY_INFO: Record<string, { desc: string; detail: string }> = {
+  "핀홀 무지외반증 교정술": {
+    desc: "최소침습 교정술 · 핀홀교정술",
+    detail: "피부를 크게 절개하지 않고 작은 구멍(핀홀)을 통해 특수 기구로 뼈를 교정하는 최소침습 수술입니다. 엄지발가락 뒤쪽의 제1중족골을 가로로 절골하여 바깥쪽으로 옮겨 각도를 바로잡고, 엄지발가락 첫마디뼈를 교정하는 Akin 절골술을 함께 시행합니다. 교정한 뼈는 고정 기구로 단단히 고정합니다.",
+  },
   "Chevron 절골술": {
     desc: "원위 중족골 V자형 절골술",
     detail: "제1중족골 원위부를 V자(chevron) 모양으로 절골한 후 외측으로 이동시켜 고정합니다. 경증~중등도의 무지외반증에 가장 널리 사용되는 술식으로, 수술 시간이 짧고 회복이 비교적 빠릅니다. 절골 부위는 특수 나사(screw)로 고정하며, 뼈가 유합된 후에는 제거하지 않아도 됩니다.",
@@ -243,7 +252,7 @@ function FootReportSection({
   const decision = surgery.final_decision ?? surgery.algorithm_result ?? "";
   const baseSurgery = decision.replace(/\s*\+\s*Akin 절골술/g, "").trim();
   const hasAkin = decision.includes("Akin");
-  const surgeryDetail = SURGERY_INFO[baseSurgery];
+  const surgeryDetail = SURGERY_INFO[SURGERY_ALIASES[baseSurgery] ?? baseSurgery];
 
   return (
     <div className="space-y-4">

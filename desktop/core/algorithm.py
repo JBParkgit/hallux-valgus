@@ -14,7 +14,23 @@ logger = logging.getLogger(__name__)
 # 수술 유형별 한국어 설명 (환자 리포트용)
 # ---------------------------------------------------------------------------
 
+# Akin 절골술이 이미 포함된 술식 — DMAA 기준으로 Akin 을 따로 붙이지 않는다
+AKIN_INCLUDED_SURGERIES: frozenset[str] = frozenset({
+    "핀홀 무지외반증 교정술",
+    "핀홀교정술",  # 병원에서 함께 쓰는 짧은 이름
+})
+
 SURGERY_DESCRIPTIONS: dict[str, str] = {
+    "핀홀 무지외반증 교정술": (
+        "핀홀 무지외반증 교정술은 피부를 크게 절개하지 않고 작은 구멍을 통해 "
+        "특수 기구로 뼈를 교정하는 최소침습 수술입니다. 제1중족골을 가로로 절골하여 "
+        "각도를 바로잡고, 엄지발가락 첫마디뼈를 교정하는 Akin 절골술을 함께 시행합니다."
+    ),
+    "핀홀교정술": (
+        "핀홀교정술(핀홀 무지외반증 교정술)은 피부를 크게 절개하지 않고 작은 구멍을 통해 "
+        "특수 기구로 뼈를 교정하는 최소침습 수술입니다. 제1중족골을 가로로 절골하여 "
+        "각도를 바로잡고, 엄지발가락 첫마디뼈를 교정하는 Akin 절골술을 함께 시행합니다."
+    ),
     "Chevron 절골술": (
         "Chevron(쉐브론) 절골술은 경증 무지외반증에 가장 널리 사용되는 수술법입니다. "
         "제1중족골 원위부를 V자 형태로 절골하여 뼈를 이동시킨 후 고정하는 방법으로, "
@@ -142,23 +158,26 @@ def recommend_surgery(
 
     # 3단계: 중증
     elif severity == "severe":
-        recommended = smap.get("severe", "근위 절골술")
+        recommended = smap.get("severe", "핀홀 무지외반증 교정술")
         reason.append("중증 무지외반증으로 수술 권장")
 
     # 4단계: 중등도
     elif severity == "moderate":
-        recommended = smap.get("moderate", "Scarf 절골술")
+        recommended = smap.get("moderate", "핀홀 무지외반증 교정술")
         reason.append("중등도 무지외반증으로 수술 권장")
 
     # 5단계: 경증
     elif severity == "mild":
-        recommended = smap.get("mild", "Chevron 절골술")
+        recommended = smap.get("mild", "핀홀 무지외반증 교정술")
         reason.append("경증 무지외반증으로 수술 권장")
 
-    # 보조 수술: DMAA 기준 초과 시
+    # 보조 수술: DMAA 기준 초과 시 (주 수술에 이미 포함된 경우는 따로 붙이지 않음)
     if dmaa is not None and dmaa > dmaa_threshold:
-        additional = dmaa_surgery
-        reason.append(f"DMAA {dmaa:.1f}° > {dmaa_threshold}°이므로 {dmaa_surgery} 추가 권장")
+        if _includes_surgery(recommended, dmaa_surgery):
+            reason.append(f"DMAA {dmaa:.1f}° > {dmaa_threshold}° — {recommended}에 {dmaa_surgery}이 포함됨")
+        else:
+            additional = dmaa_surgery
+            reason.append(f"DMAA {dmaa:.1f}° > {dmaa_threshold}°이므로 {dmaa_surgery} 추가 권장")
 
     # Custom rules
     if config:
@@ -207,6 +226,15 @@ def recommend_surgery(
     )
 
     return result
+
+
+def _includes_surgery(main: str, extra: str) -> bool:
+    """주 수술이 보조 수술을 이미 포함하는지 (예: 핀홀 교정술은 Akin 절골술 포함)."""
+    if not main or not extra:
+        return False
+    if extra in main:  # 예: 'MICA (Chevron + Akin 절골술)'
+        return True
+    return extra == "Akin 절골술" and main in AKIN_INCLUDED_SURGERIES
 
 
 def _eval_custom_rule(

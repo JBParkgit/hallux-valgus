@@ -73,6 +73,7 @@ class CaseWorkflowWidget(QWidget):
     case_title_changed = pyqtSignal(str)  # 작업 중인 환자 이름 ('' = 없음)
 
     SURGERY_OPTIONS = [
+        "핀홀 무지외반증 교정술",
         "Chevron 절골술",
         "Scarf 절골술",
         "근위 절골술",

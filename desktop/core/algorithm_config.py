@@ -17,6 +17,7 @@ _CONFIG_DIR = data_dir("algorithm_config")
 
 
 DEFAULT_SURGERIES = [
+    "핀홀 무지외반증 교정술",  # 최소침습: 가로 절골(transverse) + Akin 절골술 — 병원 주력 술식
     "Chevron 절골술",
     "Scarf 절골술",
     "근위 절골술",
@@ -37,9 +38,9 @@ def default_config() -> dict[str, Any]:
             "severe_ima": 16,
         },
         "surgery_map": {
-            "mild": "Chevron 절골술",
-            "moderate": "Scarf 절골술",
-            "severe": "근위 절골술",
+            "mild": "핀홀 무지외반증 교정술",
+            "moderate": "핀홀 무지외반증 교정술",
+            "severe": "핀홀 무지외반증 교정술",
             "severe_hypermobility": "Lapidus 절골술",
             "severe_oa": "제1MTP 관절유합술",
         },
