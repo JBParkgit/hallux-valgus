@@ -142,6 +142,10 @@ class CaseWorkflowWidget(QWidget):
             p["hypermobility_cb"].toggled.connect(self._mark_dirty)
             p["congruent_radio"].toggled.connect(self._mark_dirty)
             p["oa_grade"].currentIndexChanged.connect(self._mark_dirty)
+            # 임상 소견이 바뀌면 이전 추천은 더 이상 유효하지 않다
+            for sig in (p["hypermobility_cb"].toggled, p["congruent_radio"].toggled,
+                        p["oa_grade"].currentIndexChanged):
+                sig.connect(lambda *_, s=side: self._invalidate_recommendation(s))
 
     def has_unsaved_changes(self) -> bool:
         """Return True if there are unsaved modifications."""
@@ -806,6 +810,7 @@ class CaseWorkflowWidget(QWidget):
             p = self._panels.get(side)
             if p and base in p["angle_displays"]:
                 p["angle_displays"][base].setText(f"{angle:.1f}°")
+            self._invalidate_recommendation(side)
             self._update_realtime_severity(side)
 
     def _on_angle_reset(self, name: str) -> None:
@@ -815,7 +820,34 @@ class CaseWorkflowWidget(QWidget):
             p = self._panels.get(side)
             if p and base in p["angle_displays"]:
                 p["angle_displays"][base].setText("-- °")
+            self._invalidate_recommendation(side)
             self._update_realtime_severity(side)
+
+    def _invalidate_recommendation(self, side: str) -> None:
+        """Drop the side's recommendation after its angles or clinical findings change.
+
+        A recommendation computed from old values must not stay on screen or be
+        saved/sent; the doctor has to press '수술 추천' again.
+        """
+        if self._loading or self._recommendations.get(side) is None:
+            return
+        self._recommendations[side] = None
+        p = self._panels.get(side)
+        if p:
+            p["rec_surgery_lbl"].setText("값이 바뀌었습니다 · 다시 추천받아 주세요")
+            p["addon_lbl"].setText("")
+            self._update_realtime_severity(side)
+
+    def _stale_recommendation_sides(self) -> list[str]:
+        """Sides measured (HVA or IMA) that would be saved as '동의' without a current recommendation."""
+        stale = []
+        for side in self._get_active_sides():
+            angles = self._get_angles_for_side(side)
+            measured = angles.get("hva") is not None or angles.get("ima") is not None
+            agreed = self._panels[side]["agree_radio"].isChecked()
+            if measured and agreed and self._recommendations.get(side) is None:
+                stale.append(side)
+        return stale
 
     def _update_realtime_severity(self, side: str) -> None:
         """Update severity badge once HVA and IMA are measured."""
@@ -942,11 +974,18 @@ class CaseWorkflowWidget(QWidget):
 
     def _run_algorithm(self, side: str) -> None:
         angles = self._get_angles_for_side(side)
-        hva = angles.get("hva") or 0.0
-        ima = angles.get("ima") or 0.0
+        hva = angles.get("hva")
+        ima = angles.get("ima")
 
-        if hva == 0 and ima == 0:
-            msgbox.warning(self, "각도 미측정", "HVA, IMA 각도를 먼저 측정해 주세요.")
+        # HVA와 IMA는 판정에 둘 다 필요하다. 미측정 값을 0°로 간주하면
+        # 중증도가 실제보다 낮게 나올 수 있으므로 판정하지 않는다.
+        missing = [name for name, val in (("HVA", hva), ("IMA", ima)) if val is None]
+        if missing:
+            msgbox.warning(
+                self, "각도 미측정",
+                f"{', '.join(missing)} 각도를 먼저 측정해 주세요.\n"
+                "수술 추천에는 HVA와 IMA가 모두 필요합니다.",
+            )
             return
 
         clinical = self._get_clinical_for_side(side)
@@ -1043,6 +1082,16 @@ class CaseWorkflowWidget(QWidget):
         if self._read_only:
             msgbox.warning(self, "저장 불가", "다른 선생님의 케이스는 수정할 수 없습니다.")
             return None
+        stale = self._stale_recommendation_sides()
+        if stale:
+            names = ", ".join({"left": "좌측", "right": "우측"}[s] for s in stale)
+            if msgbox.question(
+                self, "수술 추천 필요",
+                f"{names} 발은 각도를 측정했지만 현재 값으로 받은 수술 추천이 없습니다.\n"
+                "(측정값이나 임상 소견이 바뀌면 이전 추천은 지워집니다.)\n\n"
+                "추천 없이 저장하시겠습니까?",
+            ) != QMessageBox.StandardButton.Yes:
+                return None
         patient = self._get_patient_from_fields()
         try:
             from desktop.core.patient_parser import calculate_age
@@ -1294,6 +1343,17 @@ class CaseWorkflowWidget(QWidget):
         self._loading = True
         self._set_read_only(False)
 
+        # Don't carry the previously open case's recommendation into this one
+        self._recommendations = {"left": None, "right": None}
+        for p in self._panels.values():
+            p["rec_surgery_lbl"].setText("-")
+            p["addon_lbl"].setText("")
+            p["agree_radio"].setChecked(True)
+            p["override_reason"].clear()
+        # ...nor its lines/X-ray: a case without saved measurements or image
+        # must open empty (reset_all also resets the angle displays via signals)
+        self._angle_canvas.reset_all()
+
         self._selected_patient = {
             "name": c.get("patientName", ""),
             "birth": c.get("patientBirth", ""),
@@ -1353,8 +1413,7 @@ class CaseWorkflowWidget(QWidget):
 
         saved_clinical = angle_data.get("clinical", {})
         for side in ("left", "right"):
-            if side in saved_clinical:
-                self._set_clinical_for_side(side, saved_clinical[side])
+            self._set_clinical_for_side(side, saved_clinical.get(side, _default_clinical()))
 
         self._memo_text.setPlainText(c.get("clinicalNotes") or "")
 
@@ -1385,6 +1444,10 @@ class CaseWorkflowWidget(QWidget):
                 combo.setCurrentIndex(idx)
                 if s_data.get("override_reason"):
                     p["override_reason"].setText(s_data["override_reason"])
+
+        for side in ("left", "right"):
+            if self._recommendations.get(side) is None:
+                self._update_realtime_severity(side)
 
         self._loading = False
         self._clear_dirty()

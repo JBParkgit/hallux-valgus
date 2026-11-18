@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>무지외반증 판정 검토</title>
+<style>
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --surface2:#f0f2f5; --text:#1a1e24; --muted:#5b6471; --line:#dde1e7;
+  --primary:#2b57c9; --primary-soft:#e9eefb; --mild:#23935a; --moderate:#c97d12; --severe:#cc3a3a;
+  --mild-soft:#e4f4ea; --moderate-soft:#fbf0dc; --severe-soft:#fbe5e5;
+  --warn-bg:#fff7e3; --warn-line:#eac46a;
+  --c-m1:#7d8798; --c-hva:#d9466f; --c-ima:#2b84e6; --c-dmaa:#12a07a; --bone:#d9dde3; --canvas:#eef0f3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121519; --surface:#1b1f25; --surface2:#242a31; --text:#e7eaee; --muted:#9aa3ae; --line:#323941;
+    --primary:#7a9cf5; --primary-soft:#1f2a44; --mild:#4cc285; --moderate:#e5a54a; --severe:#ef6b6b;
+    --mild-soft:#16301f; --moderate-soft:#33270f; --severe-soft:#3a1818;
+    --warn-bg:#2d2610; --warn-line:#7a6526;
+    --c-m1:#aab3c2; --c-hva:#f0789a; --c-ima:#62a8f5; --c-dmaa:#3cc9a0; --bone:#3a414b; --canvas:#0d0f12;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121519; --surface:#1b1f25; --surface2:#242a31; --text:#e7eaee; --muted:#9aa3ae; --line:#323941;
+  --primary:#7a9cf5; --primary-soft:#1f2a44; --mild:#4cc285; --moderate:#e5a54a; --severe:#ef6b6b;
+  --mild-soft:#16301f; --moderate-soft:#33270f; --severe-soft:#3a1818;
+  --warn-bg:#2d2610; --warn-line:#7a6526;
+  --c-m1:#aab3c2; --c-hva:#f0789a; --c-ima:#62a8f5; --c-dmaa:#3cc9a0; --bone:#3a414b; --canvas:#0d0f12;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--primary)}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);max-width:1240px;margin:0 auto;gap:28px;padding:24px 16px 80px}
+nav.side{position:sticky;top:20px;align-self:start}
+nav.side .brand{font-weight:800;font-size:15px;line-height:1.35;margin-bottom:14px}
+nav.side .brand small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:2px}
+nav.side ol{list-style:none;margin:0;padding:0;counter-reset:n}
+nav.side li a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav.side li a:hover{background:var(--surface2)}
+nav.side li a.on{background:var(--primary-soft);color:var(--primary);font-weight:700}
+nav.side .cnt{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+nav.side .cnt.done{color:var(--mild);font-weight:700}
+nav.side .tools{margin-top:16px;display:flex;flex-direction:column;gap:6px}
+main{min-width:0}
+section.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px 28px;margin-bottom:22px;scroll-margin-top:16px}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+h2{font-size:20px;margin:0 0 4px;letter-spacing:-.2px}
+h3{font-size:16px;margin:22px 0 8px}
+.lead{color:var(--muted);margin:0 0 18px}
+.sec-no{font-size:12px;font-weight:700;color:var(--primary);letter-spacing:.5px}
+p{margin:8px 0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+code,.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:13px}
+code{background:var(--surface2);padding:1px 5px;border-radius:4px}
+.note{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:12px 14px;font-size:14px;margin:12px 0}
+.info{background:var(--primary-soft);border-radius:10px;padding:12px 14px;font-size:14px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface2);font-weight:700;font-size:13px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+.tbl-wrap table th:first-child,.tbl-wrap table td:first-child{padding-left:14px}
+.badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.b-mild{background:var(--mild-soft);color:var(--mild)}
+.b-moderate{background:var(--moderate-soft);color:var(--moderate)}
+.b-severe{background:var(--severe-soft);color:var(--severe)}
+.b-none{background:var(--surface2);color:var(--muted)}
+button,.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:7px 13px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+button:hover,.btn:hover{background:var(--surface2)}
+button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+button.primary:hover{filter:brightness(1.08);background:var(--primary)}
+button.sm{font-size:13px;padding:4px 10px}
+input[type=text],input[type=number],input[type=date],select,textarea{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%}
+textarea{min-height:64px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:-1px;border-color:transparent}
+label.fld{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;cursor:pointer}
+/* review block */
+.review{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0;background:var(--surface)}
+.review.answered{border-color:color-mix(in srgb,var(--primary) 45%,var(--line))}
+.review .q{font-weight:700;margin-bottom:4px;display:flex;gap:8px;align-items:baseline}
+.review .q .qid{font-size:11px;color:var(--muted);font-weight:600;font-family:ui-monospace,Consolas,monospace}
+.review .body{font-size:14px;color:var(--text)}
+.review .body ul{margin:6px 0;padding-left:20px}
+.verdict{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 8px}
+.verdict label{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer;user-select:none}
+.verdict input{display:none}
+.verdict label:has(input:checked){background:var(--primary);border-color:var(--primary);color:#fff}
+.verdict label.v-ok:has(input:checked){background:var(--mild);border-color:var(--mild)}
+.verdict label.v-fix:has(input:checked){background:var(--severe);border-color:var(--severe)}
+.verdict label.v-hold:has(input:checked){background:var(--muted);border-color:var(--muted)}
+blockquote{margin:8px 0;padding:10px 14px;border-left:3px solid var(--line);background:var(--surface2);border-radius:0 8px 8px 0;font-size:14px}
+/* measurement */
+.measure-wrap{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px;margin-top:12px}
+.cv-box{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--canvas);touch-action:none}
+#mcanvas{display:block;width:100%;height:520px;cursor:crosshair}
+.cv-tag{position:absolute;left:10px;top:8px;font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--surface) 80%,transparent);padding:2px 8px;border-radius:6px}
+.lines-panel .ln{display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;margin-bottom:6px;text-align:left}
+.lines-panel .ln.on{outline:2px solid var(--primary);outline-offset:-1px}
+.lines-panel .ln .sw{width:14px;height:4px;border-radius:2px;flex:none}
+.lines-panel .ln .st{margin-left:auto;font-size:11px;color:var(--muted)}
+.ang-tiles{display:grid;gap:8px;margin-top:10px}
+.ang{border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
+.ang b{font-size:20px;font-variant-numeric:tabular-nums}
+.ang .nm{font-size:13px;font-weight:700}
+.ang .hint{font-size:11px;color:var(--muted)}
+/* heatmaps */
+.maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.map canvas{width:100%;height:auto;aspect-ratio:1.35;border:1px solid var(--line);border-radius:8px;display:block;background:var(--surface)}
+.map .cap{font-size:13px;font-weight:700;margin-bottom:6px}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+/* flow */
+.flow{display:flex;flex-direction:column;gap:0;margin:12px 0}
+.fstep{display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,1.1fr);gap:12px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.fstep .n{width:26px;height:26px;border-radius:50%;background:var(--primary-soft);color:var(--primary);font-weight:800;display:grid;place-items:center;font-size:13px}
+.fstep .cond{font-weight:600;font-size:14px}
+.fstep .out{font-size:14px}
+.farrow{height:16px;border-left:2px dashed var(--line);margin-left:25px}
+.fsub{font-size:12px;color:var(--muted)}
+.cfg-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+.cfg-edit .cur{font-size:12px;color:var(--muted)}
+.changed{background:var(--warn-bg)!important;border-color:var(--warn-line)!important}
+/* simulator */
+.sim-out{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}
+.res{border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.res h4{margin:0 0 8px;font-size:13px;color:var(--muted)}
+.res .surg{font-size:18px;font-weight:800;margin:6px 0 2px}
+.res .addon{font-size:14px;font-weight:600;color:var(--primary)}
+.trace{list-style:none;padding:0;margin:10px 0 0;font-size:13px}
+.trace li{display:flex;gap:8px;padding:4px 0;border-top:1px dashed var(--line)}
+.trace .mk{width:18px;flex:none;text-align:center;font-weight:800}
+.trace .hit .mk{color:var(--mild)}
+.trace .miss{color:var(--muted)}
+.trace .skip{color:var(--muted);opacity:.6}
+.trace .memo .mk{color:var(--moderate)}
+.diff{border-color:var(--warn-line);background:var(--warn-bg)}
+/* cases */
+.case{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+.case.answered{border-color:color-mix(in srgb,var(--primary) 45%,var(--line))}
+.case-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+.case-head .t{font-weight:700}
+.case-head .why{font-size:13px;color:var(--muted)}
+.case-in{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-size:12px;background:var(--surface2);border-radius:6px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.case-res{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:14px}
+.case-res .box{background:var(--surface2);border-radius:8px;padding:8px 12px}
+.case-res .box .k{font-size:12px;color:var(--muted)}
+.case-ans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.hidden{display:none!important}
+#report{display:none}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:12px;padding-top:12px}
+  nav.side{position:static;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+  nav.side ol{display:flex;flex-wrap:wrap;gap:4px}
+  nav.side li a{padding:5px 9px;font-size:13px}
+  .measure-wrap{grid-template-columns:1fr}
+  #mcanvas{height:420px}
+}
+@media (max-width:640px){
+  section.card{padding:18px 16px}
+  .g2,.g3,.g4,.cfg-edit,.sim-out,.case-res,.case-ans,.maps{grid-template-columns:1fr}
+  .fstep{grid-template-columns:30px minmax(0,1fr)}
+  .fstep .out{grid-column:2}
+}
+@media print{
+  body{background:#fff;color:#000;font-size:12px}
+  .layout,.toast{display:none!important}
+  #report{display:block!important;padding:0 6mm}
+  #report h1{font-size:18px} #report h2{font-size:15px;margin-top:18px;border-bottom:1px solid #999;padding-bottom:3px}
+  #report table{font-size:11px} #report th{background:#eee}
+  #report .rp-item{break-inside:avoid;margin:6px 0 10px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side" aria-label="목차">
+    <div class="brand">무지외반증 측정·판정 검토<small>의료진 검토용 · 오프라인 도구</small></div>
+    <ol id="nav"></ol>
+    <div class="tools">
+      <button class="primary" data-act="goto-export">검토 결과 내보내기</button>
+    </div>
+  </nav>
+
+  <main>
+    <!-- 0. 안내 -->
+    <section class="card" id="s-intro" data-nav="안내">
+      <div class="sec-no">검토 안내</div>
+      <h1>무지외반증 각도 측정 및 수술 방법 선택 로직 검토</h1>
+      <p class="lead">현재 프로그램이 X-ray에서 각도를 어떻게 재고, 그 값으로 어떤 수술을 추천하는지를 그대로 옮겨 놓았습니다. 각 항목에 의견을 남겨 주시면 프로그램에 반영하겠습니다.</p>
+
+      <div class="grid g3">
+        <div><label class="fld" for="rv-name">검토자</label><input type="text" id="rv-name" data-meta="name" placeholder="성함"></div>
+        <div><label class="fld" for="rv-org">소속 / 직위</label><input type="text" id="rv-org" data-meta="org" placeholder="예: 정형외과 전문의"></div>
+        <div><label class="fld" for="rv-date">검토일</label><input type="date" id="rv-date" data-meta="date"></div>
+      </div>
+
+      <h3>검토 방법</h3>
+      <ol class="small">
+        <li><b>각도 측정</b>: 선 4개를 긋는 방식과 계산식을 확인합니다. 직접 선을 그어 보거나 가지고 계신 X-ray 이미지를 불러와 시험할 수 있습니다.</li>
+        <li><b>중증도 기준 · 수술 선택 로직</b>: 기준값과 판정 순서를 확인하고, 다르게 하고 싶은 값은 <b>제안값</b> 칸에 입력합니다. 입력한 제안값은 시뮬레이터·사례 검토에 바로 반영되어 현행과 비교됩니다.</li>
+        <li><b>사례 검토</b>: 경계값 위주로 고른 가상 사례에 대해 현재 프로그램의 추천이 적절한지, 원장님이라면 어떤 수술을 고르실지 적어 주십시오.</li>
+        <li><b>환자 안내 문구</b>: 환자 리포트에 표시되는 설명 문구를 확인합니다.</li>
+        <li><b>내보내기</b>: 마지막 화면에서 <b>검토 결과 파일(.json)</b>을 저장하거나 <b>PDF로 인쇄</b>해 회신해 주십시오.</li>
+      </ol>
+
+      <div class="info">
+        각 항목은 <b>적절함 / 수정 필요 / 판단 보류</b> 중 하나를 고르고, 필요하면 의견을 적는 방식입니다. 모든 항목에 답하실 필요는 없습니다.<br>
+        입력 내용은 이 컴퓨터의 브라우저에만 자동 저장되며 외부로 전송되지 않습니다. 불러온 X-ray 이미지도 화면에만 표시되고 저장·전송되지 않습니다.
+      </div>
+      <p class="small muted">기준 코드: <code>desktop/core/algorithm.py</code>, <code>desktop/core/algorithm_config.py</code>, <code>desktop/ui/angle_canvas.py</code>, 환자 리포트 <code>src/app/report/[hash]/page.tsx</code> (커밋 b7b7601). 원장님별로 기준값을 따로 설정할 수 있는 구조이며, 여기 표시된 값은 <b>기본 설정</b>입니다.</p>
+    </section>
+
+    <!-- 1. 측정 -->
+    <section class="card" id="s-measure" data-nav="1. 각도 측정" data-group="m">
+      <div class="sec-no">1</div>
+      <h2>각도 측정 방법</h2>
+      <p class="lead">X-ray(족부 AP) 위에 발 하나당 선 4개를 긋고, 선과 선 사이의 각도로 HVA·IMA·DMAA를 계산합니다.</p>
+
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>순서</th><th>선</th><th>의미</th><th>계산되는 각도</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><b style="color:var(--c-m1)">M1</b></td><td>제1중족골 축 (모든 각도의 기준선)</td><td>—</td></tr>
+          <tr><td>2</td><td><b style="color:var(--c-hva)">P1</b></td><td>제1근위지골 축</td><td><b>HVA</b> = M1과 P1 사이 각도</td></tr>
+          <tr><td>3</td><td><b style="color:var(--c-ima)">M2</b></td><td>제2중족골 축</td><td><b>IMA</b> = M1과 M2 사이 각도</td></tr>
+          <tr><td>4</td><td><b style="color:var(--c-dmaa)">ART</b></td><td>제1중족골 원위 관절면 선</td><td><b>DMAA</b> = 90° − (M1과 ART 사이 각도)</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted">두 선 사이 각도는 항상 <b>예각(0~90°)</b>으로 계산합니다. 선의 방향(어느 쪽 끝부터 그었는지)과 기울어진 방향(내측/외측)은 결과에 영향을 주지 않습니다.</p>
+
+      <h3>직접 해 보기</h3>
+      <p class="small">아래 그림 위에서 드래그하면 오른쪽 목록에서 선택된 선이 그려지고, 다음 선으로 자동으로 넘어갑니다. 선 끝점을 끌어 조정할 수 있습니다. 처음 화면은 설명용 <b>모식도</b>입니다.</p>
+      <div class="measure-wrap">
+        <div>
+          <div class="cv-box"><canvas id="mcanvas" aria-label="각도 측정 캔버스"></canvas><span class="cv-tag" id="cv-tag">모식도 (실제 X-ray 아님)</span></div>
+          <div class="row" style="margin-top:8px">
+            <label class="btn sm" for="img-file">X-ray 이미지 불러오기</label>
+            <input type="file" id="img-file" accept="image/*" class="hidden">
+            <button class="sm" data-act="m-schematic">모식도로 돌아가기</button>
+            <button class="sm" data-act="m-preset">예시 선 다시 놓기</button>
+            <button class="sm" data-act="m-clear">선 모두 지우기</button>
+            <button class="sm" data-act="m-to-sim">이 값으로 시뮬레이터 실행 →</button>
+          </div>
+          <p class="small muted" style="margin-top:6px">이미지를 클립보드에서 붙여넣기(Ctrl+V)할 수도 있습니다.</p>
+        </div>
+        <div class="lines-panel">
+          <div id="line-btns"></div>
+          <div class="ang-tiles" id="ang-tiles"></div>
+          <p class="small muted" id="raw-art" style="margin-top:8px"></p>
+        </div>
+      </div>
+
+      <div id="items-m"></div>
+    </section>
+
+    <!-- 2. 중증도 -->
+    <section class="card" id="s-severity" data-nav="2. 중증도 기준" data-group="s">
+      <div class="sec-no">2</div>
+      <h2>중증도 분류 기준</h2>
+      <p class="lead">측정한 HVA와 IMA 두 값만으로 경증·중등도·중증을 나눕니다. DMAA, 나이, 임상 소견은 중증도에 쓰이지 않습니다.</p>
+
+      <div class="flow">
+        <div class="fstep"><span class="n">1</span><div class="cond" id="sv-cond-1"></div><div class="out"><span class="badge b-severe">중증</span></div></div>
+        <div class="farrow"></div>
+        <div class="fstep"><span class="n">2</span><div class="cond" id="sv-cond-2"></div><div class="out"><span class="badge b-moderate">중등도</span></div></div>
+        <div class="farrow"></div>
+        <div class="fstep"><span class="n">3</span><div class="cond">그 외 전부 (정상 범위 포함)</div><div class="out"><span class="badge b-mild">경증</span></div></div>
+      </div>
+      <p class="small muted">위에서부터 차례로 확인해 처음 해당하는 등급으로 정합니다. HVA와 IMA 중 <b>하나만</b> 기준을 넘어도 그 등급이 됩니다.</p>
+
+      <h3>기준값 — 현행과 제안</h3>
+      <div class="cfg-edit" id="cfg-sev"></div>
+
+      <h3>HVA × IMA 조합별 분류 지도</h3>
+      <div class="maps">
+        <div class="map"><div class="cap">현행 기준</div><canvas id="map-cur" width="540" height="400"></canvas></div>
+        <div class="map"><div class="cap">제안 기준 <span class="muted small" id="map-prop-note"></span></div><canvas id="map-prop" width="540" height="400"></canvas></div>
+      </div>
+      <div class="legend"><span><i style="background:var(--mild)"></i>경증</span><span><i style="background:var(--moderate)"></i>중등도</span><span><i style="background:var(--severe)"></i>중증</span><span>가로: HVA 0~60° · 세로: IMA 0~25° · 점선: 일반적으로 쓰이는 정상 상한(HVA 15°, IMA 9°)</span></div>
+
+      <div id="items-s"></div>
+    </section>
+
+    <!-- 3. 수술 선택 -->
+    <section class="card" id="s-logic" data-nav="3. 수술 선택 로직" data-group="l">
+      <div class="sec-no">3</div>
+      <h2>수술 방법 선택 로직</h2>
+      <p class="lead">중증도와 임상 소견으로 주 수술을 한 가지 고르고, DMAA가 기준을 넘으면 보조 수술을 추가합니다. 위에서부터 차례로 확인해 처음 해당하는 단계에서 주 수술이 정해집니다.</p>
+
+      <div class="flow" id="logic-flow"></div>
+
+      <h3>판정에는 영향이 없고 참고 문구만 붙는 항목</h3>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>입력</th><th>조건</th><th>결과</th></tr></thead>
+        <tbody>
+          <tr><td>관절 일치성</td><td>Incongruent</td><td>“관절 부적합성 확인 - 수술 계획 시 고려 필요” 문구만 추가</td></tr>
+          <tr><td>나이</td><td id="age-cond"></td><td>“고령 환자 - 회복 기간 고려 필요” 문구만 추가</td></tr>
+          <tr><td>이전 수술 이력</td><td>있음</td><td>“재수술 시 주의 필요” 문구만 추가 — <b>현재 화면에 입력란이 없어 항상 ‘없음’으로 처리</b></td></tr>
+          <tr><td>골관절염</td><td>Mild · Moderate</td><td>아무 영향 없음 (Severe만 판정에 사용)</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>등급별 수술 — 현행과 제안</h3>
+      <div class="cfg-edit" id="cfg-map"></div>
+
+      <div id="items-l"></div>
+    </section>
+
+    <!-- 4. 시뮬레이터 -->
+    <section class="card" id="s-sim" data-nav="4. 시뮬레이터">
+      <div class="sec-no">4</div>
+      <h2>판정 시뮬레이터</h2>
+      <p class="lead">값을 넣으면 현행 기준과 제안 기준의 판정 결과, 그리고 어느 단계에서 결정되었는지가 나란히 표시됩니다.</p>
+      <div class="grid g4" id="sim-form">
+        <div><label class="fld" for="sim-hva">HVA (°)</label><input type="number" step="0.1" id="sim-hva" value="32"></div>
+        <div><label class="fld" for="sim-ima">IMA (°)</label><input type="number" step="0.1" id="sim-ima" value="13"></div>
+        <div><label class="fld" for="sim-dmaa">DMAA (°, 비우면 미측정)</label><input type="number" step="0.1" id="sim-dmaa" value="8"></div>
+        <div><label class="fld" for="sim-age">나이 (비우면 미상)</label><input type="number" step="1" id="sim-age" value="52"></div>
+        <div><label class="fld" for="sim-oa">골관절염</label><select id="sim-oa"><option value="none">None</option><option value="mild">Mild</option><option value="moderate">Moderate</option><option value="severe">Severe</option></select></div>
+        <div><label class="fld" for="sim-cong">관절 일치성</label><select id="sim-cong"><option value="congruent">Congruent</option><option value="incongruent">Incongruent</option></select></div>
+        <div style="align-self:end"><label class="chk"><input type="checkbox" id="sim-hyper"> 제1중족골 과운동성</label></div>
+        <div style="align-self:end"><label class="chk"><input type="checkbox" id="sim-prev"> 이전 수술 이력<span class="muted small">(현재 화면엔 없음)</span></label></div>
+      </div>
+      <div class="sim-out" id="sim-out"></div>
+      <div class="row" style="margin-top:12px"><button data-act="sim-to-case">이 조건을 사례 검토에 추가</button></div>
+    </section>
+
+    <!-- 5. 사례 -->
+    <section class="card" id="s-cases" data-nav="5. 사례 검토" data-group="c">
+      <div class="sec-no">5</div>
+      <h2>사례 검토</h2>
+      <p class="lead">경계값과 판단이 갈릴 만한 조건 위주로 만든 가상 사례입니다. 현재 프로그램의 추천이 적절한지, 아니라면 어떤 수술을 고르실지 적어 주십시오.</p>
+      <div id="case-list"></div>
+      <h3>직접 추가한 사례</h3>
+      <p class="small muted" id="custom-empty">시뮬레이터에서 “이 조건을 사례 검토에 추가”를 누르면 여기에 추가됩니다.</p>
+      <div id="custom-case-list"></div>
+    </section>
+
+    <!-- 6. 문구 -->
+    <section class="card" id="s-texts" data-nav="6. 환자 안내 문구" data-group="t">
+      <div class="sec-no">6</div>
+      <h2>환자 리포트 안내 문구</h2>
+      <p class="lead">환자가 받는 리포트(웹)에 표시되는 문구입니다. 의학적으로 부정확하거나 과장된 표현이 있으면 수정 문안을 적어 주십시오.</p>
+      <div id="items-t"></div>
+    </section>
+
+    <!-- 7. 내보내기 -->
+    <section class="card" id="s-export" data-nav="7. 내보내기">
+      <div class="sec-no">7</div>
+      <h2>검토 결과 내보내기</h2>
+      <p class="lead">아래 중 편한 방법으로 회신해 주십시오.</p>
+      <div><label class="fld" for="general">종합 의견</label><textarea id="general" data-meta="general" style="min-height:110px" placeholder="전반적인 의견, 추가로 필요한 기능이나 측정 항목 등"></textarea></div>
+      <p id="export-summary" class="small" style="margin-top:12px"></p>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" data-act="export-json">검토 결과 파일 저장 (.json)</button>
+        <button data-act="print">PDF로 인쇄 / 저장</button>
+        <button data-act="copy-text">요약 텍스트 복사 (메신저용)</button>
+      </div>
+      <h3>기타</h3>
+      <div class="row">
+        <label class="btn sm" for="import-file">저장한 검토 파일 불러오기</label>
+        <input type="file" id="import-file" accept=".json,application/json" class="hidden">
+        <button class="sm" data-act="reset">입력 내용 모두 지우기</button>
+      </div>
+      <p class="small muted">검토 파일(.json)에는 제안 기준값이 프로그램 설정과 같은 형식으로 들어 있어, 받으신 뒤 그대로 프로그램에 적용할 수 있습니다.</p>
+    </section>
+  </main>
+</div>
+
+<div id="report"></div>
+<div class="toast" id="toast"></div>
+
+<datalist id="surg-list">
+  <option value="Chevron 절골술"><option value="Scarf 절골술"><option value="근위 절골술"><option value="Lapidus 절골술">
+  <option value="제1MTP 관절유합술"><option value="Akin 절골술"><option value="보존적 치료 (수술 비권장)">
+  <option value="Biplanar Chevron (DMAA 교정)"><option value="최소침습 절골술 (MICA 등)"><option value="Double/Triple osteotomy">
+</datalist>
+
+<script>
+// ==ALGO-START== (desktop/core/algorithm.py, algorithm_config.py, ui/angle_canvas.py 와 동일한 동작)
+function defaultConfig(){
+  return {
+    severity:{moderate_hva:30, moderate_ima:14, severe_hva:40, severe_ima:16},
+    surgery_map:{mild:"Chevron 절골술", moderate:"Scarf 절골술", severe:"근위 절골술",
+                 severe_hypermobility:"Lapidus 절골술", severe_oa:"제1MTP 관절유합술"},
+    dmaa_threshold:10.0, dmaa_surgery:"Akin 절골술", age_warning:60
+  };
+}
+function classifySeverity(hva, ima, cfg){
+  const s = cfg.severity;
+  if (hva > s.severe_hva || ima > s.severe_ima) return "severe";
+  if (hva >= s.moderate_hva || ima >= s.moderate_ima) return "moderate";
+  return "mild";
+}
+function fmtNum(v){ return (Math.round(v*10)/10).toString(); }
+/* inp: {hva, ima, dmaa|null, age|null, hypermobility, congruency, oa, previous} */
+function recommendSurgery(inp, cfg){
+  const s = cfg.severity, m = cfg.surgery_map;
+  const hva = inp.hva, ima = inp.ima;
+  const severity = classifySeverity(hva, ima, cfg);
+  const reason = [`HVA: ${fmtNum(hva)}°, IMA: ${fmtNum(ima)}°`, `중증도 분류: ${severity}`];
+  const trace = [];
+  const sevHit = hva > s.severe_hva || ima > s.severe_ima;
+  trace.push({kind: sevHit?"hit":"miss", text:`중증 기준: HVA > ${s.severe_hva}° 또는 IMA > ${s.severe_ima}°`, out: sevHit?"중증":""});
+  if (!sevHit){
+    const modHit = hva >= s.moderate_hva || ima >= s.moderate_ima;
+    trace.push({kind: modHit?"hit":"miss", text:`중등도 기준: HVA ≥ ${s.moderate_hva}° 또는 IMA ≥ ${s.moderate_ima}°`, out: modHit?"중등도":""});
+    if (!modHit) trace.push({kind:"hit", text:"그 외", out:"경증"});
+  }
+  const steps = [
+    {test: inp.oa === "severe", key:"severe_oa", text:"골관절염 = Severe", msg:"심한 골관절염으로 관절유합술 권장"},
+    {test: severity === "severe" && !!inp.hypermobility, key:"severe_hypermobility", text:"중증 + 과운동성", msg:"중증 무지외반증 + 관절 과운동성으로 수술 권장"},
+    {test: severity === "severe", key:"severe", text:"중증", msg:"중증 무지외반증으로 수술 권장"},
+    {test: severity === "moderate", key:"moderate", text:"중등도", msg:"중등도 무지외반증으로 수술 권장"},
+    {test: severity === "mild", key:"mild", text:"경증", msg:"경증 무지외반증으로 수술 권장"},
+  ];
+  let recommended = "", additional = null, decided = false;
+  for (const st of steps){
+    if (decided){ trace.push({kind:"skip", text:st.text, out:""}); continue; }
+    if (st.test){ recommended = m[st.key]; reason.push(st.msg); decided = true; trace.push({kind:"hit", text:st.text, out:"주 수술 → "+recommended}); }
+    else trace.push({kind:"miss", text:st.text, out:""});
+  }
+  const dmaa = inp.dmaa;
+  if (dmaa !== null && dmaa !== undefined && dmaa > cfg.dmaa_threshold){
+    additional = cfg.dmaa_surgery;
+    reason.push(`DMAA ${fmtNum(dmaa)}° > ${cfg.dmaa_threshold}°이므로 ${cfg.dmaa_surgery} 추가 권장`);
+    trace.push({kind:"hit", text:`DMAA > ${cfg.dmaa_threshold}°`, out:"보조 수술 → "+cfg.dmaa_surgery});
+  } else {
+    trace.push({kind:"miss", text:`DMAA > ${cfg.dmaa_threshold}°` + (dmaa==null?" (미측정)":""), out:""});
+  }
+  if (inp.previous){ reason.push("이전 수술 이력 있음 - 재수술 시 주의 필요"); trace.push({kind:"memo", text:"이전 수술 이력", out:"참고 문구만"}); }
+  if (inp.congruency === "incongruent"){ reason.push("관절 부적합성 확인 - 수술 계획 시 고려 필요"); trace.push({kind:"memo", text:"Incongruent", out:"참고 문구만"}); }
+  if (inp.age !== null && inp.age !== undefined && inp.age >= cfg.age_warning){
+    reason.push(`${cfg.age_warning}세 이상 고령 환자 - 회복 기간 고려 필요`); trace.push({kind:"memo", text:`${cfg.age_warning}세 이상`, out:"참고 문구만"});
+  }
+  return {severity, recommended_surgery: recommended, additional_surgery: additional, reason, trace};
+}
+/* 두 선 사이 예각 (0–90°). 선 = [{x,y},{x,y}] */
+function acuteAngle(p0, p1, p2, p3){
+  const v1x = p1.x-p0.x, v1y = p1.y-p0.y, v2x = p3.x-p2.x, v2y = p3.y-p2.y;
+  const a = Math.abs(Math.atan2(v1x*v2y - v1y*v2x, v1x*v2x + v1y*v2y)) * 180 / Math.PI;
+  return a > 90 ? 180 - a : a;
+}
+function anglesFromLines(L){
+  const out = {HVA:null, IMA:null, DMAA:null, rawArt:null};
+  if (!L.M1) return out;
+  if (L.P1) out.HVA = acuteAngle(L.M1[0], L.M1[1], L.P1[0], L.P1[1]);
+  if (L.M2) out.IMA = acuteAngle(L.M1[0], L.M1[1], L.M2[0], L.M2[1]);
+  if (L.ART){ out.rawArt = acuteAngle(L.M1[0], L.M1[1], L.ART[0], L.ART[1]); out.DMAA = 90 - out.rawArt; }
+  return out;
+}
+// ==ALGO-END==
+</script>
+
+<script>
+"use strict";
+const SEV_KO = {mild:"경증", moderate:"중등도", severe:"중증"};
+const STORE_KEY = "hv-clinical-review-v1";
+const TOOL_VERSION = "1.0 (2026-11-18, 기준 커밋 b7b7601)";
+
+/* ───────── 검토 항목 ───────── */
+const ITEMS = [
+  // 측정
+  {g:"m", id:"m-lines", title:"선 4개의 정의", body:`<p>발 하나당 <b>M1(제1중족골 축), P1(제1근위지골 축), M2(제2중족골 축), ART(제1중족골 원위 관절면 선)</b>을 긋습니다. M1은 세 각도 모두의 공통 기준선입니다.</p><p>이 4개의 선으로 HVA·IMA·DMAA를 구하는 방식이 원장님이 실제로 측정하시는 방식과 같은지 확인 부탁드립니다.</p>`},
+  {g:"m", id:"m-axis", title:"축을 긋는 기준점", body:`<p>현재 프로그램은 축을 <b>사용자가 눈으로 보고 자유롭게</b> 긋습니다. 어느 지점을 이어야 하는지(예: 골간부 근위·원위 중심점을 잇는 방법, 골두 중심과 기저부 중심을 잇는 방법 등)에 대한 안내나 보조 기능은 없습니다.</p><p>측정자마다 결과가 달라지지 않도록 화면에 안내할 <b>기준점 정의</b>가 있다면 적어 주십시오.</p>`},
+  {g:"m", id:"m-dmaa", title:"DMAA 계산 방식", body:`<p>DMAA = <b>90° − (M1과 ART 사이 예각)</b>으로 계산합니다. 즉 관절면 선이 M1과 정확히 직각이면 0°입니다.</p><ul><li>관절면 선의 끝점은 무엇으로 잡아야 하는지(관절면 내측·외측 끝 등) 화면에 안내가 없습니다.</li><li>관절면이 <b>외측으로 기울었는지 내측으로 기울었는지 구분하지 않고</b> 항상 0 이상의 값으로 나옵니다.</li></ul><p>이 계산이 실제 DMAA 정의와 맞는지, 방향 구분이 필요한지 의견 부탁드립니다.</p>`},
+  {g:"m", id:"m-direction", title:"각도 방향(외반·내반) 구분", body:`<p>HVA와 IMA도 두 선 사이의 <b>예각</b>만 계산합니다. 엄지가 바깥(외반)으로 휘었는지 안쪽(내반)으로 휘었는지는 구분하지 않습니다. 예를 들어 무지내반 10°도 HVA 10°로 기록됩니다.</p><p>방향 구분이 필요한지, 혹은 무지외반 환자만 대상으로 하므로 지금 방식으로 충분한지 의견 부탁드립니다.</p>`},
+  {g:"m", id:"m-required", title:"필수 측정 항목", body:`<p>수술 추천을 받으려면 <b>HVA와 IMA를 둘 다</b> 측정해야 합니다(하나라도 없으면 판정하지 않음). <b>DMAA는 선택</b>이며, 재지 않으면 보조 수술(Akin) 판단만 건너뜁니다.</p><p>DMAA도 필수로 해야 하는지 등, 판정 전에 반드시 재야 하는 항목에 대해 의견 부탁드립니다.</p>`},
+  {g:"m", id:"m-extra", title:"추가로 필요한 측정 지표", body:`<p>현재는 HVA, IMA, DMAA 세 가지만 잽니다. 수술 방법 선택에 함께 보시는 지표가 있다면 적어 주십시오.</p><p class="muted small">예: 지간 외반각(HVIA), 종자골 위치(sesamoid position), 제1중족골 길이·회내(pronation), 제1중족-설상골 관절 경사, 관절 간격 등</p>`},
+  // 중증도
+  {g:"s", id:"s-thresholds", title:"중증도 기준값", body:`<p>현행: <b>중등도</b> HVA ≥ 30° 또는 IMA ≥ 14° / <b>중증</b> HVA &gt; 40° 또는 IMA &gt; 16°.</p><p>참고로 문헌에서 흔히 인용되는 분류 가운데 하나는 경증 HVA &lt; 20°·IMA &lt; 11°, 중등도 HVA 20~40°·IMA 11~16°, 중증 HVA &gt; 40°·IMA &gt; 16° 정도이며, 문헌마다 차이가 있습니다. 현행은 중등도 시작점이 이보다 높게 잡혀 있습니다.</p><p>원장님이 쓰시는 기준이 다르다면 위 <b>제안값</b> 칸에 입력하고 이유를 적어 주십시오.</p>`},
+  {g:"s", id:"s-normal", title:"정상 범위 처리", body:`<p>현행 로직에는 <b>‘정상’ 등급이 없어</b> HVA 10°, IMA 7°처럼 정상 범위여도 <b>경증으로 분류되고 Chevron 절골술이 추천</b>됩니다. 반면 환자 리포트의 각도 막대는 HVA &lt; 15°, IMA &lt; 9°, DMAA &lt; 10°를 ‘정상’으로 표시합니다.</p><p>정상 또는 ‘수술 비적응(보존적 치료)’ 단계를 두어야 하는지, 둔다면 기준은 무엇인지 의견 부탁드립니다.</p>`},
+  {g:"s", id:"s-boundary", title:"경계값 처리 (이상/초과)", body:`<p>중등도는 <b>이상(≥)</b>, 중증은 <b>초과(&gt;)</b>로 판정합니다. 따라서 HVA가 정확히 40°이거나 IMA가 정확히 16°이면 <b>중등도</b>입니다.</p><p>그런데 환자 리포트의 각도 막대는 HVA 40°, IMA 16°를 <b>‘중증’</b>으로 표시해, 같은 환자의 리포트 안에서 등급 표시가 엇갈릴 수 있습니다. 경계값을 어느 쪽에 넣을지 정해 주십시오.</p>`},
+  {g:"s", id:"s-or", title:"HVA·IMA 중 하나만 넘어도 상위 등급", body:`<p>예: HVA 22°, IMA 14°이면 HVA는 낮아도 IMA 때문에 중등도가 됩니다. HVA 41°, IMA 10°이면 중증입니다.</p><p>두 값 중 <b>더 심한 쪽을 따르는 방식(OR)</b>이 적절한지, 아니면 다른 조합 방식이 필요한지 의견 부탁드립니다.</p>`},
+  // 로직
+  {g:"l", id:"l-order", title:"판정 순서", body:`<p>골관절염(Severe) → 중증+과운동성 → 중증 → 중등도 → 경증 순서로 확인하고 처음 해당하는 단계에서 주 수술이 정해집니다. 골관절염이 Severe면 각도와 상관없이 관절유합술입니다.</p><p>순서와 단계 구성이 적절한지 확인 부탁드립니다.</p>`},
+  {g:"l", id:"l-map", title:"등급별 주 수술", body:`<p>경증 → Chevron, 중등도 → Scarf, 중증 → 근위 절골술, 중증+과운동성 → Lapidus, 골관절염 Severe → 제1MTP 관절유합술.</p><p>한 등급에 수술 한 가지만 연결되어 있습니다. 바꾸고 싶은 수술이 있으면 위 <b>제안</b> 칸에 입력해 주시고, 한 등급에 여러 선택지(예: 1순위·대안)가 필요하면 적어 주십시오.</p>`},
+  {g:"l", id:"l-hyper", title:"과운동성 반영 범위", body:`<p>제1중족골 과운동성은 <b>중증일 때만</b> 반영됩니다. 중등도·경증 환자는 과운동성이 있어도 Scarf·Chevron이 그대로 추천됩니다.</p><p>중등도에서도 과운동성이 있으면 Lapidus를 고려해야 하는지 의견 부탁드립니다.</p>`},
+  {g:"l", id:"l-oa", title:"골관절염 단계 반영", body:`<p>골관절염은 None / Mild / Moderate / Severe 중 <b>Severe만</b> 판정에 쓰입니다. Moderate는 아무 영향이 없습니다.</p><p>Moderate 골관절염에 대한 처리(관절유합술 고려, 참고 문구 등)가 필요한지 의견 부탁드립니다.</p>`},
+  {g:"l", id:"l-cong", title:"관절 일치성(Congruent/Incongruent)", body:`<p>입력은 받지만 <b>수술 선택에는 영향이 없고</b>, Incongruent일 때 참고 문구만 붙습니다.</p><p>일치성에 따라 수술 방법이 달라져야 하는지(예: Congruent 관절에서 DMAA가 큰 경우의 처리) 의견 부탁드립니다.</p>`},
+  {g:"l", id:"l-dmaa", title:"DMAA 기준 보조 수술 (Akin)", body:`<p>DMAA가 <b>10° 초과</b>이면 주 수술과 함께 <b>Akin 절골술</b>을 추가로 추천합니다.</p><p>Akin 절골술은 근위지골 쪽 교정이고 DMAA는 중족골 원위 관절면의 기울기여서, DMAA 증가를 원위 절골의 각도 교정(biplanar 등)으로 다루는 경우도 있습니다. 현재 연결이 원장님의 의도와 맞는지, 보조 수술의 기준(DMAA 외에 지간 외반각 등)을 어떻게 할지 의견 부탁드립니다.</p>`},
+  {g:"l", id:"l-age", title:"나이 반영", body:`<p>60세 이상이면 “회복 기간 고려” 문구만 붙고 수술 선택은 바뀌지 않습니다. 나이에 따라 수술 방법이 달라져야 하는 경우가 있는지 의견 부탁드립니다.</p>`},
+  {g:"l", id:"l-prev", title:"이전 수술 이력 (재발)", body:`<p>로직에는 이전 수술 이력 처리가 있지만 <b>측정 화면에 입력란이 없어 항상 ‘없음’</b>으로 판정됩니다. 재발 환자의 경우 수술 선택이 달라져야 하는지, 입력란을 추가해야 하는지 의견 부탁드립니다.</p>`},
+];
+
+const TEXTS = [
+  {id:"t-sev-mild", title:"중증도 설명 — 경증", text:"무지외반증의 초기 단계로, 변형이 크지 않아 보존적 치료와 함께 경과 관찰이 가능한 상태입니다. 적절한 교정으로 양호한 예후가 기대됩니다.", note:"경증이어도 같은 리포트에서 Chevron 절골술이 ‘권장 수술’로 표시됩니다."},
+  {id:"t-sev-moderate", title:"중증도 설명 — 중등도", text:"적극적인 치료가 필요한 단계입니다. 변형이 진행되어 일상생활에 불편함을 초래하며, 수술적 교정을 통해 정상에 가까운 회복이 가능합니다."},
+  {id:"t-sev-severe", title:"중증도 설명 — 중증", text:"심한 변형으로 수술적 치료가 반드시 필요한 단계입니다. 전문적인 수술을 통해 통증 완화와 기능 회복을 목표로 합니다."},
+  {id:"t-chevron", title:"Chevron 절골술 (회복 4~6주 · 부분 또는 전신 마취)", text:"제1중족골 원위부를 V자(chevron) 모양으로 절골한 후 외측으로 이동시켜 고정합니다. 경증~중등도의 무지외반증에 가장 널리 사용되는 술식으로, 수술 시간이 짧고 회복이 비교적 빠릅니다. 절골 부위는 특수 나사(screw)로 고정하며, 뼈가 유합된 후에는 제거하지 않아도 됩니다."},
+  {id:"t-scarf", title:"Scarf 절골술 (회복 6~8주 · 부분 또는 전신 마취)", text:"제1중족골을 Z자 모양으로 길게 절골하여 정밀하게 교정합니다. Chevron 절골술보다 큰 교정이 가능하며, 특히 중등도 변형에 효과적입니다. 넓은 절골면이 안정적인 고정을 제공하고, 3차원적 교정(회전, 단축, 이동)이 가능한 장점이 있습니다."},
+  {id:"t-proximal", title:"근위 절골술 (회복 8~12주 · 전신 마취)", text:"제1중족골의 기저부(몸쪽)에서 절골하여 큰 각도의 교정을 수행합니다. 중족골간각(IMA)이 크게 증가된 경우에 효과적이며, 근본적인 교정이 가능합니다. 절골 후 금속판 또는 나사로 고정하며, 뼈 유합까지 체중 부하를 제한해야 합니다."},
+  {id:"t-lapidus", title:"Lapidus 절골술 (회복 10~12주 · 전신 마취)", text:"제1중족-내측 설상골(TMT) 관절을 유합하여 변형의 근본 원인인 관절 불안정성을 교정합니다. 중증 변형, 과운동성(hypermobility)이 있는 경우, 재발된 무지외반증에 특히 효과적입니다. 재발률이 가장 낮은 술식이지만, 회복 기간이 다소 깁니다.", note:"명칭이 ‘절골술’로 되어 있으나 내용은 관절 유합술입니다. 명칭(예: Lapidus 유합술) 확인이 필요합니다. ‘재발률이 가장 낮은’ 같은 비교 표현도 확인 부탁드립니다."},
+  {id:"t-mtp", title:"제1MTP 관절유합술 (회복 10~12주 · 전신 마취)", text:"제1중족지절(MTP) 관절을 유합하여 통증을 제거하고 안정성을 확보합니다. 심한 관절염이 동반된 중증 무지외반증, 이전 수술 후 재발, 또는 관절 파괴가 진행된 경우에 시행합니다. 관절 운동은 제한되지만 통증 해소 효과가 확실합니다.", note:"‘통증 해소 효과가 확실합니다’처럼 효과를 단정하는 표현이 있습니다."},
+  {id:"t-akin", title:"Akin 절골술 (보조 수술)", text:"근위지골 내측 쐐기 절골술을 추가하여 엄지발가락의 정렬을 더욱 개선합니다. 잔여 변형을 미세 교정하여 수술 결과를 최적화합니다."},
+];
+
+/* ───────── 사례 ───────── */
+const CASES = [
+  {id:"c01", why:"정상 범위 각도", inp:{hva:12, ima:8, dmaa:6, age:34, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c02", why:"전형적인 경증", inp:{hva:24, ima:11, dmaa:7, age:45, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c03", why:"중등도 경계 바로 아래", inp:{hva:29.5, ima:13.5, dmaa:8, age:50, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c04", why:"HVA만 중등도 기준", inp:{hva:30, ima:10, dmaa:6, age:41, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c05", why:"IMA만 중등도 기준 (HVA 낮음)", inp:{hva:22, ima:14, dmaa:5, age:38, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c06", why:"HVA 정확히 40° (리포트 막대는 ‘중증’)", inp:{hva:40, ima:15, dmaa:8, age:55, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c07", why:"IMA 정확히 16°", inp:{hva:34, ima:16, dmaa:9, age:47, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c08", why:"HVA만 중증 (IMA 낮음)", inp:{hva:42, ima:11, dmaa:7, age:58, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c09", why:"전형적인 중증", inp:{hva:45, ima:18, dmaa:9, age:52, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c10", why:"중증 + 과운동성", inp:{hva:44, ima:17.5, dmaa:8, age:48, hypermobility:true, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c11", why:"중등도 + 과운동성 (과운동성 미반영)", inp:{hva:34, ima:15, dmaa:7, age:44, hypermobility:true, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c12", why:"경증 + DMAA 증가 + Congruent", inp:{hva:27, ima:11, dmaa:16, age:29, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+  {id:"c13", why:"중등도 + DMAA 증가 + Incongruent", inp:{hva:36, ima:14, dmaa:15, age:51, hypermobility:false, congruency:"incongruent", oa:"none", previous:false}},
+  {id:"c14", why:"각도는 경증, 골관절염 Severe", inp:{hva:24, ima:10, dmaa:6, age:63, hypermobility:false, congruency:"congruent", oa:"severe", previous:false}},
+  {id:"c15", why:"중등도 + 골관절염 Moderate + 고령", inp:{hva:38, ima:15, dmaa:9, age:71, hypermobility:false, congruency:"congruent", oa:"moderate", previous:false}},
+  {id:"c16", why:"중증 + 과운동성 + 골관절염 Severe", inp:{hva:50, ima:20, dmaa:12, age:66, hypermobility:true, congruency:"incongruent", oa:"severe", previous:false}},
+  {id:"c17", why:"재발 환자 (이전 수술 이력)", inp:{hva:33, ima:13, dmaa:8, age:57, hypermobility:false, congruency:"congruent", oa:"none", previous:true}},
+  {id:"c18", why:"DMAA 미측정 (보조 수술 판단 생략)", inp:{hva:35, ima:13, dmaa:null, age:49, hypermobility:false, congruency:"congruent", oa:"none", previous:false}},
+];
+
+/* ───────── 상태 ───────── */
+function blankState(){
+  return {meta:{name:"", org:"", date:new Date().toISOString().slice(0,10), general:""},
+          items:{}, cases:{}, customCases:[], proposed: defaultConfig()};
+}
+let state = blankState();
+const CURRENT = defaultConfig();
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw){ const s = JSON.parse(raw); state = mergeState(blankState(), s); }
+  }catch(e){}
+}
+function mergeState(base, s){
+  if (!s || typeof s !== "object") return base;
+  Object.assign(base.meta, s.meta || {});
+  Object.assign(base.items, s.items || {});
+  Object.assign(base.cases, s.cases || {});
+  if (Array.isArray(s.customCases)) base.customCases = s.customCases;
+  const p = s.proposed || s.proposedConfig;
+  if (p){ Object.assign(base.proposed.severity, p.severity || {}); Object.assign(base.proposed.surgery_map, p.surgery_map || {});
+    for (const k of ["dmaa_threshold","dmaa_surgery","age_warning"]) if (p[k] !== undefined) base.proposed[k] = p[k]; }
+  return base;
+}
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }, 250);
+  updateProgress();
+}
+
+/* ───────── 유틸 ───────── */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sevBadge = sev => `<span class="badge b-${sev}">${SEV_KO[sev]}</span>`;
+const f1 = v => (v === null || v === undefined || Number.isNaN(v)) ? "—" : (Math.round(v*10)/10).toFixed(1);
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+const VERDICTS = [["ok","적절함","v-ok"],["fix","수정 필요","v-fix"],["hold","판단 보류","v-hold"]];
+const VERDICT_KO = {ok:"적절함", fix:"수정 필요", hold:"판단 보류"};
+
+/* ───────── 검토 블록 ───────── */
+function reviewHTML(id, title, body, placeholder){
+  const st = state.items[id] || {};
+  const radios = VERDICTS.map(([v,l,c]) => `<label class="${c}"><input type="radio" name="v-${id}" value="${v}" ${st.verdict===v?"checked":""}>${l}</label>`).join("");
+  return `<div class="review ${st.verdict||st.comment?"answered":""}" data-item="${id}">
+    <div class="q"><span>${esc(title)}</span><span class="qid">${id}</span></div>
+    <div class="body">${body}</div>
+    <div class="verdict" role="radiogroup" aria-label="${esc(title)} 판단">${radios}</div>
+    <textarea data-field="comment" aria-label="${esc(title)} 의견" placeholder="${esc(placeholder||"의견 (선택)")}">${esc(st.comment||"")}</textarea>
+  </div>`;
+}
+function renderItems(){
+  for (const g of ["m","s","l"]){
+    $("#items-"+g).innerHTML = `<h3>검토 질문</h3>` + ITEMS.filter(i => i.g === g).map(i => reviewHTML(i.id, i.title, i.body)).join("");
+  }
+  $("#items-t").innerHTML = TEXTS.map(t => reviewHTML(t.id, t.title,
+    `<blockquote>${esc(t.text)}</blockquote>` + (t.note ? `<p class="small muted">확인 포인트: ${esc(t.note)}</p>` : ""),
+    "수정 문안이나 의견 (선택)")).join("");
+}
+
+/* ───────── 설정 편집 (현행 vs 제안) ───────── */
+const CFG_FIELDS_SEV = [
+  ["severity.moderate_hva","중등도 시작 HVA (≥, °)"],["severity.moderate_ima","중등도 시작 IMA (≥, °)"],
+  ["severity.severe_hva","중증 HVA (>, °)"],["severity.severe_ima","중증 IMA (>, °)"],
+];
+const CFG_FIELDS_MAP = [
+  ["surgery_map.mild","경증 → 주 수술"],["surgery_map.moderate","중등도 → 주 수술"],["surgery_map.severe","중증 → 주 수술"],
+  ["surgery_map.severe_hypermobility","중증 + 과운동성 → 주 수술"],["surgery_map.severe_oa","골관절염 Severe → 주 수술"],
+  ["dmaa_threshold","보조 수술 DMAA 기준 (>, °)"],["dmaa_surgery","DMAA 기준 초과 시 보조 수술"],["age_warning","고령 참고 문구 나이 (≥)"],
+];
+const getPath = (o, p) => p.split(".").reduce((a,k) => a?.[k], o);
+function setPath(o, p, v){ const ks = p.split("."); const last = ks.pop(); ks.reduce((a,k) => a[k], o)[last] = v; }
+function cfgFieldHTML([path, label]){
+  const cur = getPath(CURRENT, path), val = getPath(state.proposed, path);
+  const isNum = typeof cur === "number";
+  const id = "cfg-" + path.replace(".","-");
+  const input = isNum
+    ? `<input type="number" step="${path==="age_warning"?1:0.5}" id="${id}" data-cfg="${path}" value="${val}">`
+    : `<input type="text" list="surg-list" id="${id}" data-cfg="${path}" value="${esc(val)}">`;
+  return `<div><label class="fld" for="${id}">${label}</label>${input}<div class="cur">현행: ${esc(cur)}${isNum && path!=="age_warning" ? "°":""}${path==="age_warning"?"세":""}</div></div>`;
+}
+function renderCfg(){
+  $("#cfg-sev").innerHTML = CFG_FIELDS_SEV.map(cfgFieldHTML).join("");
+  $("#cfg-map").innerHTML = CFG_FIELDS_MAP.map(cfgFieldHTML).join("") +
+    `<div style="align-self:end"><button class="sm" data-act="cfg-reset">제안값을 현행으로 되돌리기</button></div>`;
+  markChangedCfg();
+}
+function markChangedCfg(){
+  $$("[data-cfg]").forEach(el => {
+    const p = el.dataset.cfg; el.classList.toggle("changed", String(getPath(CURRENT,p)) !== String(getPath(state.proposed,p)));
+  });
+}
+function cfgDiffs(){
+  return [...CFG_FIELDS_SEV, ...CFG_FIELDS_MAP].filter(([p]) => String(getPath(CURRENT,p)) !== String(getPath(state.proposed,p)))
+    .map(([p,l]) => ({path:p, label:l, from:getPath(CURRENT,p), to:getPath(state.proposed,p)}));
+}
+
+/* ───────── 중증도 흐름 + 지도 ───────── */
+function renderSeverityFlow(){
+  const s = CURRENT.severity;
+  $("#sv-cond-1").innerHTML = `HVA &gt; ${s.severe_hva}° <span class="muted">또는</span> IMA &gt; ${s.severe_ima}°`;
+  $("#sv-cond-2").innerHTML = `HVA ≥ ${s.moderate_hva}° <span class="muted">또는</span> IMA ≥ ${s.moderate_ima}°`;
+  $("#age-cond").textContent = `${CURRENT.age_warning}세 이상`;
+}
+function drawMap(canvas, cfg){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, padL = 40, padB = 30, padT = 8, padR = 8;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  ctx.clearRect(0,0,W,H);
+  const col = {mild:cssVar("--mild"), moderate:cssVar("--moderate"), severe:cssVar("--severe")};
+  const HMAX = 60, IMAX = 25, step = 0.5;
+  const cw = pw / (HMAX/step), ch = ph / (IMAX/step);
+  ctx.globalAlpha = 0.78;
+  for (let h = 0; h < HMAX; h += step){
+    for (let i = 0; i < IMAX; i += step){
+      ctx.fillStyle = col[classifySeverity(h + step/2, i + step/2, cfg)];
+      ctx.fillRect(padL + (h/step)*cw, padT + ph - ((i/step)+1)*ch, cw + 0.6, ch + 0.6);
+    }
+  }
+  ctx.globalAlpha = 1;
+  // normal reference
+  ctx.strokeStyle = cssVar("--text"); ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  const x15 = padL + 15/HMAX*pw, y9 = padT + ph - 9/IMAX*ph;
+  ctx.beginPath(); ctx.moveTo(padL, y9); ctx.lineTo(x15, y9); ctx.lineTo(x15, padT+ph); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = cssVar("--text"); ctx.font = "12px system-ui, sans-serif";
+  ctx.fillText("정상", padL + 6, padT + ph - 8);
+  // axes
+  ctx.fillStyle = cssVar("--muted"); ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "center";
+  for (let h = 0; h <= HMAX; h += 10) ctx.fillText(h + "°", padL + h/HMAX*pw, H - 12);
+  ctx.textAlign = "right";
+  for (let i = 0; i <= IMAX; i += 5) ctx.fillText(i + "°", padL - 6, padT + ph - i/IMAX*ph + 4);
+  ctx.textAlign = "left"; ctx.fillText("HVA →", W - 48, H - 1);
+  ctx.save(); ctx.translate(10, padT + 40); ctx.rotate(-Math.PI/2); ctx.textAlign = "right"; ctx.fillText("IMA →", 0, 0); ctx.restore();
+}
+function renderMaps(){
+  drawMap($("#map-cur"), CURRENT); drawMap($("#map-prop"), state.proposed);
+  const changed = JSON.stringify(CURRENT.severity) !== JSON.stringify(state.proposed.severity);
+  $("#map-prop-note").textContent = changed ? "· 현행과 다름" : "· 현행과 같음";
+}
+
+/* ───────── 수술 선택 흐름 ───────── */
+function renderLogicFlow(){
+  const m = CURRENT.surgery_map;
+  const rows = [
+    ["골관절염 = Severe", "각도와 무관", m.severe_oa],
+    ["중증 <b>그리고</b> 과운동성 있음", "", m.severe_hypermobility],
+    ["중증", "", m.severe],
+    ["중등도", "", m.moderate],
+    ["경증", "정상 범위 포함", m.mild],
+  ];
+  let html = rows.map((r,i) => `<div class="fstep"><span class="n">${i+1}</span><div class="cond">${r[0]}${r[1]?`<div class="fsub">${r[1]}</div>`:""}</div><div class="out">주 수술 → <b>${esc(r[2])}</b></div></div>`).join(`<div class="farrow"></div>`);
+  html += `<div class="farrow"></div><div class="fstep" style="border-style:dashed"><span class="n">+</span><div class="cond">DMAA &gt; ${CURRENT.dmaa_threshold}°<div class="fsub">위 결과와 별개로 확인 · DMAA 미측정이면 건너뜀</div></div><div class="out">보조 수술 추가 → <b>${esc(CURRENT.dmaa_surgery)}</b></div></div>`;
+  $("#logic-flow").innerHTML = html;
+}
+
+/* ───────── 시뮬레이터 ───────── */
+function numOrNull(v){ if (v === "" || v === null || v === undefined) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
+function simInput(){
+  return {hva: numOrNull($("#sim-hva").value) ?? 0, ima: numOrNull($("#sim-ima").value) ?? 0,
+          dmaa: numOrNull($("#sim-dmaa").value), age: numOrNull($("#sim-age").value),
+          hypermobility: $("#sim-hyper").checked, congruency: $("#sim-cong").value, oa: $("#sim-oa").value, previous: $("#sim-prev").checked};
+}
+function resultHTML(title, r, diff){
+  const tr = r.trace.map(t => `<li class="${t.kind}"><span class="mk">${{hit:"✓",miss:"·",skip:"–",memo:"!"}[t.kind]}</span><span>${esc(t.text)}${t.out?` <b>→ ${esc(t.out.replace(/^.*→ /,""))}</b>`:""}</span></li>`).join("");
+  return `<div class="res ${diff?"diff":""}"><h4>${title}</h4>${sevBadge(r.severity)}
+    <div class="surg">${esc(r.recommended_surgery)}</div>
+    <div class="addon">${r.additional_surgery ? "+ " + esc(r.additional_surgery) : '<span class="muted small">보조 수술 없음</span>'}</div>
+    <ul class="trace">${tr}</ul></div>`;
+}
+function sameResult(a, b){ return a.severity === b.severity && a.recommended_surgery === b.recommended_surgery && (a.additional_surgery||"") === (b.additional_surgery||""); }
+function runSim(){
+  const inp = simInput();
+  const a = recommendSurgery(inp, CURRENT), b = recommendSurgery(inp, state.proposed);
+  const d = !sameResult(a,b);
+  $("#sim-out").innerHTML = resultHTML("현행 기준", a, false) + resultHTML("제안 기준" + (d ? " — 결과가 다릅니다" : ""), b, d);
+}
+
+/* ───────── 사례 ───────── */
+function inputChips(inp){
+  const c = [`HVA ${f1(inp.hva)}°`, `IMA ${f1(inp.ima)}°`, `DMAA ${inp.dmaa==null?"미측정":f1(inp.dmaa)+"°"}`,
+             `나이 ${inp.age==null?"미상":inp.age+"세"}`, `골관절염 ${({none:"None",mild:"Mild",moderate:"Moderate",severe:"Severe"})[inp.oa]}`,
+             inp.congruency==="incongruent" ? "Incongruent" : "Congruent"];
+  if (inp.hypermobility) c.push("과운동성 있음");
+  if (inp.previous) c.push("이전 수술 있음");
+  return c.map(x => `<span class="chip">${esc(x)}</span>`).join("");
+}
+function recText(r){ return r.recommended_surgery + (r.additional_surgery ? " + " + r.additional_surgery : ""); }
+function caseHTML(c, idx, custom){
+  const a = recommendSurgery(c.inp, CURRENT), b = recommendSurgery(c.inp, state.proposed);
+  const d = !sameResult(a,b);
+  const st = state.cases[c.id] || {};
+  const radios = [["agree","현행 추천에 동의","v-ok"],["disagree","다른 의견","v-fix"],["hold","판단 보류","v-hold"]]
+    .map(([v,l,cl]) => `<label class="${cl}"><input type="radio" name="cv-${c.id}" value="${v}" ${st.verdict===v?"checked":""}>${l}</label>`).join("");
+  return `<div class="case ${st.verdict||st.comment||st.surgery?"answered":""}" data-case="${c.id}">
+    <div class="case-head"><span class="t">사례 ${idx}</span><span class="why">${esc(c.why||"")}</span>${custom?`<button class="sm" data-act="del-case" data-id="${c.id}" style="margin-left:auto">삭제</button>`:""}</div>
+    <div class="case-in">${inputChips(c.inp)}</div>
+    <div class="case-res">
+      <div class="box"><div class="k">현행 프로그램 판정</div>${sevBadge(a.severity)} <b>${esc(recText(a))}</b></div>
+      <div class="box ${d?"diff":""}"><div class="k">제안 기준 적용 시</div>${d ? `${sevBadge(b.severity)} <b>${esc(recText(b))}</b>` : '<span class="muted">현행과 같음</span>'}</div>
+    </div>
+    <div class="verdict">${radios}</div>
+    <div class="case-ans ${st.verdict==="disagree"?"":"hidden"}" data-disagree>
+      <div><label class="fld">원장님이 선택하실 주 수술</label><input type="text" list="surg-list" data-field="surgery" value="${esc(st.surgery||"")}" placeholder="목록에서 고르거나 직접 입력"></div>
+      <div><label class="fld">보조 수술</label><input type="text" list="surg-list" data-field="addon" value="${esc(st.addon||"")}" placeholder="없으면 비워 두세요"></div>
+    </div>
+    <textarea data-field="comment" style="margin-top:8px" placeholder="판단 근거나 의견 (선택)">${esc(st.comment||"")}</textarea>
+  </div>`;
+}
+function renderCases(){
+  $("#case-list").innerHTML = CASES.map((c,i) => caseHTML(c, i+1, false)).join("");
+  $("#custom-case-list").innerHTML = state.customCases.map((c,i) => caseHTML(c, "추가 " + (i+1), true)).join("");
+  $("#custom-empty").classList.toggle("hidden", state.customCases.length > 0);
+}
+function refreshCaseResults(){
+  // 제안값이 바뀌면 판정 부분만 다시 그림 (입력 중인 글은 유지)
+  const all = [...CASES, ...state.customCases];
+  $$("[data-case]").forEach(el => {
+    const c = all.find(x => x.id === el.dataset.case); if (!c) return;
+    const a = recommendSurgery(c.inp, CURRENT), b = recommendSurgery(c.inp, state.proposed), d = !sameResult(a,b);
+    const boxes = $$(".case-res .box", el);
+    boxes[1].classList.toggle("diff", d);
+    boxes[1].innerHTML = `<div class="k">제안 기준 적용 시</div>` + (d ? `${sevBadge(b.severity)} <b>${esc(recText(b))}</b>` : '<span class="muted">현행과 같음</span>');
+  });
+}
+
+/* ───────── 측정 캔버스 ───────── */
+const LINE_DEF = [
+  {k:"M1", name:"M1 · 제1중족골 축", color:"--c-m1"},
+  {k:"P1", name:"P1 · 제1근위지골 축", color:"--c-hva"},
+  {k:"M2", name:"M2 · 제2중족골 축", color:"--c-ima"},
+  {k:"ART", name:"ART · 원위 관절면 선", color:"--c-dmaa"},
+];
+const M = {img:null, W:600, H:720, lines:{}, active:"M1", draft:null, drag:null, hover:null, s:1, ox:0, oy:0};
+const SCHEMA = (() => {
+  const M1 = [{x:330,y:640},{x:272,y:385}], P1 = [{x:266,y:358},{x:330,y:214}], M2 = [{x:420,y:655},{x:414,y:378}];
+  // ART: 원위 관절면 — M1과 78°를 이루도록 (DMAA 12°)
+  const ux = M1[1].x-M1[0].x, uy = M1[1].y-M1[0].y, L = Math.hypot(ux,uy), u = {x:ux/L, y:uy/L};
+  const th = 78 * Math.PI/180, d = {x:u.x*Math.cos(th) - u.y*Math.sin(th), y:u.x*Math.sin(th) + u.y*Math.cos(th)};
+  const c = {x:M1[1].x + u.x*16, y:M1[1].y + u.y*16};
+  const ART = [{x:c.x - d.x*34, y:c.y - d.y*34}, {x:c.x + d.x*34, y:c.y + d.y*34}];
+  return {M1, P1, M2, ART};
+})();
+function presetLines(){ M.lines = JSON.parse(JSON.stringify(SCHEMA)); M.active = "M1"; }
+const cv = () => $("#mcanvas");
+function fitCanvas(){
+  const c = cv(), r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+  const s = Math.min(r.width / M.W, r.height / M.H) * 0.94;
+  M.s = s; M.ox = (r.width - M.W*s)/2; M.oy = (r.height - M.H*s)/2; M.dpr = dpr;
+}
+const toWorld = (x,y) => ({x:(x - M.ox)/M.s, y:(y - M.oy)/M.s});
+const toScreen = p => ({x:p.x*M.s + M.ox, y:p.y*M.s + M.oy});
+function capsule(ctx, a, b, r){
+  const ang = Math.atan2(b.y-a.y, b.x-a.x), len = Math.hypot(b.x-a.x, b.y-a.y);
+  ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(len,-r); ctx.arc(len,0,r,-Math.PI/2,Math.PI/2); ctx.lineTo(0,r); ctx.arc(0,0,r,Math.PI/2,Math.PI*1.5); ctx.fill(); ctx.restore();
+}
+function drawSchematic(ctx){
+  ctx.fillStyle = cssVar("--bone");
+  const S = SCHEMA, ext = (l, k) => { const dx=l[1].x-l[0].x, dy=l[1].y-l[0].y, L=Math.hypot(dx,dy); return {x:l[1].x+dx/L*k, y:l[1].y+dy/L*k}; };
+  capsule(ctx, S.M1[0], S.M1[1], 24);               // 제1중족골
+  capsule(ctx, S.P1[0], S.P1[1], 19);               // 근위지골
+  const pd = ext(S.P1, 26); capsule(ctx, pd, ext(S.P1, 100), 17); // 원위지골
+  capsule(ctx, S.M2[0], S.M2[1], 17);               // 제2중족골
+  const m2t = ext(S.M2, 22); capsule(ctx, m2t, ext(S.M2, 105), 13); capsule(ctx, ext(S.M2, 122), ext(S.M2, 170), 11);
+  capsule(ctx, {x:505,y:660}, {x:500,y:410}, 15); capsule(ctx, {x:575,y:650}, {x:582,y:440}, 14); // 3·4 중족골
+  ctx.beginPath(); ctx.ellipse(300, 700, 70, 26, 0, 0, Math.PI*2); ctx.fill();   // 설상골 (모식)
+  ctx.beginPath(); ctx.ellipse(445, 705, 80, 24, 0, 0, Math.PI*2); ctx.fill();
+}
+function drawExtended(ctx, a, b, lenPx){
+  const dx = b.x-a.x, dy = b.y-a.y, L = Math.hypot(dx,dy); if (L < 1e-6) return;
+  const ux = dx/L, uy = dy/L;
+  ctx.beginPath(); ctx.moveTo(a.x - ux*lenPx, a.y - uy*lenPx); ctx.lineTo(b.x + ux*lenPx, b.y + uy*lenPx); ctx.stroke();
+}
+function drawCanvas(){
+  const c = cv(), ctx = c.getContext("2d");
+  ctx.setTransform(M.dpr,0,0,M.dpr,0,0);
+  const r = c.getBoundingClientRect();
+  ctx.clearRect(0,0,r.width,r.height);
+  ctx.save(); ctx.translate(M.ox, M.oy); ctx.scale(M.s, M.s);
+  if (M.img) ctx.drawImage(M.img, 0, 0, M.W, M.H); else drawSchematic(ctx);
+  ctx.restore();
+  const all = {...M.lines}; if (M.draft) all[M.active] = M.draft;
+  for (const d of LINE_DEF){
+    const l = all[d.k]; if (!l) continue;
+    const a = toScreen(l[0]), b = toScreen(l[1]), col = cssVar(d.color);
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
+    drawExtended(ctx, a, b, 2000); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.lineWidth = d.k === M.active ? 3.5 : 2.5; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    for (const p of [a,b]){ ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.font = "bold 12px system-ui, sans-serif"; ctx.fillStyle = col;
+    const lp = a.y < b.y ? a : b; ctx.fillText(d.k, lp.x + 8, lp.y - 8);
+  }
+}
+function hitTest(sx, sy){
+  for (const d of LINE_DEF){ const l = M.lines[d.k]; if (!l) continue;
+    for (let i = 0; i < 2; i++){ const p = toScreen(l[i]); if (Math.hypot(p.x-sx, p.y-sy) <= 12) return [d.k, i]; } }
+  return null;
+}
+function renderLinePanel(){
+  $("#line-btns").innerHTML = LINE_DEF.map(d => `<button class="ln ${d.k===M.active?"on":""}" data-line="${d.k}"><span class="sw" style="background:var(${d.color})"></span>${d.name}<span class="st">${M.lines[d.k]?"그림":"미완"}</span></button>`).join("");
+  const A = anglesFromLines(M.lines);
+  const t = [["HVA","무지외반각","M1–P1",A.HVA,"--c-hva"],["IMA","중족골간각","M1–M2",A.IMA,"--c-ima"],["DMAA","원위관절면각","90 − (M1–ART)",A.DMAA,"--c-dmaa"]];
+  $("#ang-tiles").innerHTML = t.map(([k,n,f,v,c]) => `<div class="ang" style="border-left:4px solid var(${c})"><div><div class="nm">${k} · ${n}</div><div class="hint">${f}</div></div><b>${v==null?"--":f1(v)}°</b></div>`).join("");
+  $("#raw-art").textContent = A.rawArt == null ? "" : `참고: M1과 ART 사이 각도 ${f1(A.rawArt)}° → DMAA = 90 − ${f1(A.rawArt)} = ${f1(A.DMAA)}°`;
+}
+function nextActive(from){
+  const order = LINE_DEF.map(d => d.k), i = order.indexOf(from);
+  for (let k = 1; k <= order.length; k++){ const n = order[(i+k) % order.length]; if (!M.lines[n]) return n; }
+  return from;
+}
+function measureRefresh(){ drawCanvas(); renderLinePanel(); }
+function setupCanvas(){
+  const c = cv();
+  const pos = e => { const r = c.getBoundingClientRect(); return {x:e.clientX - r.left, y:e.clientY - r.top}; };
+  c.addEventListener("pointerdown", e => {
+    const p = pos(e); c.setPointerCapture(e.pointerId);
+    const h = hitTest(p.x, p.y);
+    if (h){ M.drag = h; return; }
+    const w = toWorld(p.x, p.y); M.draft = [w, {...w}]; M._start = p;
+  });
+  c.addEventListener("pointermove", e => {
+    const p = pos(e);
+    if (M.drag){ M.lines[M.drag[0]][M.drag[1]] = toWorld(p.x, p.y); measureRefresh(); return; }
+    if (M.draft){ M.draft[1] = toWorld(p.x, p.y); drawCanvas(); return; }
+    c.style.cursor = hitTest(p.x, p.y) ? "grab" : "crosshair";
+  });
+  const end = e => {
+    if (M.drag){ M.drag = null; measureRefresh(); return; }
+    if (M.draft){
+      const p = pos(e);
+      if (Math.hypot(p.x - M._start.x, p.y - M._start.y) >= 4){ M.lines[M.active] = M.draft; M.draft = null; M.active = nextActive(M.active); }
+      M.draft = null; measureRefresh();
+    }
+  };
+  c.addEventListener("pointerup", end); c.addEventListener("pointercancel", end);
+  window.addEventListener("resize", () => { fitCanvas(); drawCanvas(); });
+  $("#img-file").addEventListener("change", e => { const f = e.target.files[0]; if (f) loadImageFile(f); e.target.value = ""; });
+  window.addEventListener("paste", e => {
+    const it = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith("image/"));
+    if (it){ loadImageFile(it.getAsFile()); e.preventDefault(); }
+  });
+}
+function loadImageFile(f){
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => { M.img = img; M.W = img.naturalWidth; M.H = img.naturalHeight; M.lines = {}; M.active = "M1";
+    $("#cv-tag").textContent = "불러온 이미지 (이 화면에서만 사용)"; fitCanvas(); measureRefresh(); toast("이미지를 불러왔습니다. M1부터 그어 주세요."); };
+  img.onerror = () => toast("이미지를 열 수 없습니다.");
+  img.src = url;
+}
+
+/* ───────── 진행률 / 내비 ───────── */
+function groupCount(g){
+  if (g === "c"){ const ids = [...CASES, ...state.customCases].map(c => c.id); return [ids.filter(i => state.cases[i]?.verdict).length, ids.length]; }
+  const ids = g === "t" ? TEXTS.map(t => t.id) : ITEMS.filter(i => i.g === g).map(i => i.id);
+  return [ids.filter(i => state.items[i]?.verdict).length, ids.length];
+}
+function renderNav(){
+  $("#nav").innerHTML = $$("section[data-nav]").map(s => `<li><a href="#${s.id}" data-sec="${s.id}"><span>${s.dataset.nav}</span>${s.dataset.group?`<span class="cnt" data-cnt="${s.dataset.group}"></span>`:""}</a></li>`).join("");
+  updateProgress();
+  const obs = new IntersectionObserver(es => { es.forEach(en => { if (en.isIntersecting){ $$("#nav a").forEach(a => a.classList.toggle("on", a.dataset.sec === en.target.id)); } }); }, {rootMargin:"-30% 0px -60% 0px"});
+  $$("section[data-nav]").forEach(s => obs.observe(s));
+}
+function updateProgress(){
+  $$("[data-cnt]").forEach(el => { const [a,b] = groupCount(el.dataset.cnt); el.textContent = `${a}/${b}`; el.classList.toggle("done", a === b && b > 0); });
+  const tot = ["m","s","l","c","t"].map(groupCount).reduce((x,[a,b]) => [x[0]+a, x[1]+b], [0,0]);
+  const fixes = Object.values(state.items).filter(v => v.verdict === "fix").length;
+  const dis = Object.values(state.cases).filter(v => v.verdict === "disagree").length;
+  const diffs = cfgDiffs().length;
+  const el = $("#export-summary");
+  if (el) el.innerHTML = `응답 ${tot[0]} / ${tot[1]}개 · 수정 필요 ${fixes}건 · 사례 이견 ${dis}건 · 기준값 변경 제안 ${diffs}건`;
+}
+
+/* ───────── 내보내기 ───────── */
+function exportObject(){
+  const all = [...CASES, ...state.customCases];
+  return {
+    tool:"hallux-valgus-clinical-review", version: TOOL_VERSION, exportedAt: new Date().toISOString(),
+    reviewer: {name: state.meta.name, org: state.meta.org, date: state.meta.date},
+    generalComment: state.meta.general,
+    items: [...ITEMS.map(i => ({id:i.id, section:{m:"측정",s:"중증도",l:"수술 선택"}[i.g], title:i.title})), ...TEXTS.map(t => ({id:t.id, section:"환자 문구", title:t.title}))]
+      .map(x => ({...x, verdict: state.items[x.id]?.verdict || null, comment: state.items[x.id]?.comment || ""})),
+    cases: all.map(c => { const r = recommendSurgery(c.inp, CURRENT), st = state.cases[c.id] || {};
+      return {id:c.id, custom: c.id.startsWith("u"), note:c.why || "", input:c.inp,
+        programResult:{severity:r.severity, surgery:r.recommended_surgery, additional:r.additional_surgery},
+        verdict: st.verdict || null, doctorSurgery: st.surgery || "", doctorAdditional: st.addon || "", comment: st.comment || ""}; }),
+    currentConfig: CURRENT,
+    proposedConfig: state.proposed,   // desktop/core/algorithm_config.py 와 같은 형식
+    proposedChanges: cfgDiffs(),
+    _state: state,
+  };
+}
+function download(name, text, type){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function fileStamp(){ const n = (state.meta.name || "검토").replace(/[\\/:*?"<>|\s]+/g, ""); return `무지외반증_판정검토_${n}_${state.meta.date || new Date().toISOString().slice(0,10)}`; }
+function buildReport(){
+  const o = exportObject();
+  const vk = v => v ? VERDICT_KO[v] : "미응답";
+  const secs = ["측정","중증도","수술 선택","환자 문구"];
+  let h = `<h1>무지외반증 측정·수술 판정 로직 검토 결과</h1>
+  <p>검토자: ${esc(o.reviewer.name||"-")} (${esc(o.reviewer.org||"-")}) · 검토일: ${esc(o.reviewer.date||"-")} · 도구 ${esc(TOOL_VERSION)}</p>`;
+  if (o.generalComment) h += `<h2>종합 의견</h2><p style="white-space:pre-wrap">${esc(o.generalComment)}</p>`;
+  if (o.proposedChanges.length) h += `<h2>기준값 변경 제안</h2><table><tr><th>항목</th><th>현행</th><th>제안</th></tr>${o.proposedChanges.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.from)}</td><td><b>${esc(c.to)}</b></td></tr>`).join("")}</table>`;
+  for (const s of secs){
+    const its = o.items.filter(i => i.section === s);
+    h += `<h2>${s}</h2>` + its.map(i => `<div class="rp-item"><b>[${vk(i.verdict)}]</b> ${esc(i.title)}${i.comment?`<div style="white-space:pre-wrap;margin-left:12px">${esc(i.comment)}</div>`:""}</div>`).join("");
+  }
+  h += `<h2>사례 검토</h2><table><tr><th>#</th><th>입력</th><th>프로그램 판정</th><th>판단</th><th>의료진 선택 / 의견</th></tr>` +
+    o.cases.map((c,i) => `<tr><td>${c.custom?"추가":""}${i+1}</td><td>HVA ${f1(c.input.hva)}, IMA ${f1(c.input.ima)}, DMAA ${c.input.dmaa==null?"-":f1(c.input.dmaa)}, 나이 ${c.input.age??"-"}, OA ${c.input.oa}${c.input.hypermobility?", 과운동성":""}${c.input.congruency==="incongruent"?", Incongruent":""}${c.input.previous?", 수술력":""}</td><td>${SEV_KO[c.programResult.severity]} · ${esc(c.programResult.surgery)}${c.programResult.additional?" + "+esc(c.programResult.additional):""}</td><td>${({agree:"동의",disagree:"이견",hold:"보류"})[c.verdict]||"미응답"}</td><td>${c.doctorSurgery?`<b>${esc(c.doctorSurgery)}${c.doctorAdditional?" + "+esc(c.doctorAdditional):""}</b><br>`:""}${esc(c.comment)}</td></tr>`).join("") + `</table>`;
+  $("#report").innerHTML = h;
+}
+function summaryText(){
+  const o = exportObject(), L = [];
+  L.push(`[무지외반증 판정 로직 검토] ${o.reviewer.name||""} ${o.reviewer.date||""}`.trim());
+  if (o.generalComment) L.push("", "■ 종합 의견", o.generalComment);
+  if (o.proposedChanges.length){ L.push("", "■ 기준값 변경 제안"); o.proposedChanges.forEach(c => L.push(`- ${c.label}: ${c.from} → ${c.to}`)); }
+  const fx = o.items.filter(i => i.verdict === "fix" || (i.comment && i.verdict !== "ok"));
+  if (fx.length){ L.push("", "■ 수정 필요 / 의견"); fx.forEach(i => L.push(`- [${i.section}] ${i.title}${i.verdict?` (${VERDICT_KO[i.verdict]})`:""}${i.comment?": "+i.comment:""}`)); }
+  const dc = o.cases.filter(c => c.verdict === "disagree" || c.comment);
+  if (dc.length){ L.push("", "■ 사례 의견"); dc.forEach(c => L.push(`- HVA ${f1(c.input.hva)}/IMA ${f1(c.input.ima)}/DMAA ${c.input.dmaa==null?"-":f1(c.input.dmaa)}: 프로그램 ${c.programResult.surgery}${c.programResult.additional?"+"+c.programResult.additional:""}${c.doctorSurgery?` → 의견 ${c.doctorSurgery}${c.doctorAdditional?"+"+c.doctorAdditional:""}`:""}${c.comment?` (${c.comment})`:""}`)); }
+  return L.join("\n");
+}
+
+/* ───────── 이벤트 ───────── */
+function onInput(e){
+  const t = e.target;
+  if (t.dataset.meta){ state.meta[t.dataset.meta] = t.value; save(); return; }
+  if (t.dataset.cfg){
+    const p = t.dataset.cfg, isNum = typeof getPath(CURRENT, p) === "number";
+    const v = isNum ? numOrNull(t.value) : t.value.trim();
+    if (isNum && v === null) return;
+    setPath(state.proposed, p, v); markChangedCfg(); renderMaps(); runSim(); refreshCaseResults(); save(); return;
+  }
+  if (t.closest("#sim-form")){ runSim(); return; }
+  const item = t.closest("[data-item]");
+  if (item){
+    const id = item.dataset.item, st = state.items[id] || (state.items[id] = {});
+    if (t.type === "radio") st.verdict = t.value; else if (t.dataset.field) st[t.dataset.field] = t.value;
+    item.classList.toggle("answered", !!(st.verdict || st.comment)); save(); return;
+  }
+  const cs = t.closest("[data-case]");
+  if (cs){
+    const id = cs.dataset.case, st = state.cases[id] || (state.cases[id] = {});
+    if (t.type === "radio"){ st.verdict = t.value; $("[data-disagree]", cs).classList.toggle("hidden", t.value !== "disagree"); }
+    else if (t.dataset.field) st[t.dataset.field] = t.value;
+    cs.classList.toggle("answered", !!(st.verdict || st.comment || st.surgery)); save();
+  }
+}
+function onClick(e){
+  const ln = e.target.closest("[data-line]");
+  if (ln){ M.active = ln.dataset.line; M.draft = null; measureRefresh(); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const act = b.dataset.act;
+  if (act === "goto-export") $("#s-export").scrollIntoView();
+  else if (act === "m-preset"){ presetLines(); measureRefresh(); }
+  else if (act === "m-clear"){ M.lines = {}; M.active = "M1"; measureRefresh(); }
+  else if (act === "m-schematic"){ M.img = null; M.W = 600; M.H = 720; presetLines(); $("#cv-tag").textContent = "모식도 (실제 X-ray 아님)"; fitCanvas(); measureRefresh(); }
+  else if (act === "m-to-sim"){
+    const A = anglesFromLines(M.lines);
+    if (A.HVA == null && A.IMA == null){ toast("M1과 P1 또는 M2를 먼저 그어 주세요."); return; }
+    $("#sim-hva").value = A.HVA == null ? "" : f1(A.HVA); $("#sim-ima").value = A.IMA == null ? "" : f1(A.IMA);
+    $("#sim-dmaa").value = A.DMAA == null ? "" : f1(A.DMAA); runSim(); $("#s-sim").scrollIntoView();
+  }
+  else if (act === "cfg-reset"){ state.proposed = defaultConfig(); renderCfg(); renderMaps(); runSim(); refreshCaseResults(); save(); toast("제안값을 현행으로 되돌렸습니다."); }
+  else if (act === "sim-to-case"){
+    const inp = simInput(); const id = "u" + Date.now().toString(36);
+    state.customCases.push({id, why:"직접 추가", inp}); renderCases(); save();
+    $("#s-cases").scrollIntoView(); toast("사례 검토 목록 맨 아래에 추가했습니다.");
+  }
+  else if (act === "del-case"){
+    const id = b.dataset.id; if (!confirm("이 사례를 삭제할까요?")) return;
+    state.customCases = state.customCases.filter(c => c.id !== id); delete state.cases[id]; renderCases(); save();
+  }
+  else if (act === "export-json"){ download(fileStamp() + ".json", JSON.stringify(exportObject(), null, 2), "application/json"); toast("검토 결과 파일을 저장했습니다."); }
+  else if (act === "print"){ buildReport(); window.print(); }
+  else if (act === "copy-text"){
+    const txt = summaryText();
+    (navigator.clipboard?.writeText(txt) ?? Promise.reject()).then(() => toast("요약을 복사했습니다."), () => { download(fileStamp() + ".txt", txt, "text/plain"); toast("복사가 안 되어 텍스트 파일로 저장했습니다."); });
+  }
+  else if (act === "reset"){
+    if (!confirm("입력한 검토 내용과 제안값을 모두 지울까요? 되돌릴 수 없습니다.")) return;
+    state = blankState(); try{ localStorage.removeItem(STORE_KEY); }catch(_){}
+    renderAll(); toast("모두 지웠습니다.");
+  }
+}
+function importFile(f){
+  const rd = new FileReader();
+  rd.onload = () => {
+    try{
+      const o = JSON.parse(rd.result); const s = o._state || o;
+      if (!s.items && !s.cases && !s.meta) throw new Error();
+      state = mergeState(blankState(), s); renderAll(); save(); toast("검토 파일을 불러왔습니다.");
+    }catch(_){ toast("이 도구에서 저장한 검토 파일이 아닙니다."); }
+  };
+  rd.readAsText(f);
+}
+function renderAll(){
+  $$("[data-meta]").forEach(el => el.value = state.meta[el.dataset.meta] || "");
+  renderItems(); renderCfg(); renderMaps(); renderCases(); runSim(); updateProgress();
+}
+
+/* ───────── 시작 ───────── */
+loadState();
+renderSeverityFlow(); renderLogicFlow(); renderNav(); renderAll();
+presetLines(); setupCanvas(); fitCanvas(); measureRefresh();
+document.addEventListener("input", onInput); document.addEventListener("change", onInput);
+document.addEventListener("click", onClick);
+$("#import-file").addEventListener("change", e => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ""; });
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { renderMaps(); drawCanvas(); });
+window.addEventListener("beforeprint", buildReport);
+</script>
+</body>
+</html>
