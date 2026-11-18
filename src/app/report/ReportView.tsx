@@ -1,30 +1,11 @@
-export const dynamic = "force-dynamic";
-
-import { notFound } from "next/navigation";
+/**
+ * 환자용 무지외반증 리포트 화면 (디자인).
+ * 데이터는 /report 페이지(page.tsx)가 측정기 서버 API에서 받아 넘겨준다.
+ */
 import Image from "next/image";
-import { readFile } from "fs/promises";
-import path from "path";
-import { prisma } from "@/lib/prisma";
-
-async function getImageDimensions(caseId: string): Promise<{ w: number; h: number } | null> {
-  try {
-    const filePath = path.join(process.cwd(), "data", "xray_images", `${caseId}.png`);
-    const buf = await readFile(filePath);
-    // PNG header: width at offset 16 (4 bytes BE), height at offset 20 (4 bytes BE)
-    if (buf.length > 24 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
-      const w = buf.readUInt32BE(16);
-      const h = buf.readUInt32BE(20);
-      return { w, h };
-    }
-  } catch { /* file not found */ }
-  return null;
-}
+import type { ReportCase } from "@/lib/hvReport";
 
 /* ─── types ─── */
-
-interface PageProps {
-  params: Promise<{ hash: string }>;
-}
 
 interface SurgeryData {
   angles?: { hva?: number; ima?: number; dmaa?: number };
@@ -110,31 +91,31 @@ const SURGERY_INFO: Record<string, { desc: string; detail: string; recovery: str
     desc: "원위 중족골 V자형 절골술",
     detail: "제1중족골 원위부를 V자(chevron) 모양으로 절골한 후 외측으로 이동시켜 고정합니다. 경증~중등도의 무지외반증에 가장 널리 사용되는 술식으로, 수술 시간이 짧고 회복이 비교적 빠릅니다. 절골 부위는 특수 나사(screw)로 고정하며, 뼈가 유합된 후에는 제거하지 않아도 됩니다.",
     recovery: "4~6주",
-    anesthesia: "부분 마취 또는 전신 마취",
+    anesthesia: "하반신 마취",
   },
   "Scarf 절골술": {
     desc: "중족골 Z자형 절골술",
     detail: "제1중족골을 Z자 모양으로 길게 절골하여 정밀하게 교정합니다. Chevron 절골술보다 큰 교정이 가능하며, 특히 중등도 변형에 효과적입니다. 넓은 절골면이 안정적인 고정을 제공하고, 3차원적 교정(회전, 단축, 이동)이 가능한 장점이 있습니다.",
     recovery: "6~8주",
-    anesthesia: "부분 마취 또는 전신 마취",
+    anesthesia: "하반신 마취",
   },
   "근위 절골술": {
     desc: "근위 중족골 절골술",
     detail: "제1중족골의 기저부(몸쪽)에서 절골하여 큰 각도의 교정을 수행합니다. 중족골간각(IMA)이 크게 증가된 경우에 효과적이며, 근본적인 교정이 가능합니다. 절골 후 금속판 또는 나사로 고정하며, 뼈 유합까지 체중 부하를 제한해야 합니다.",
     recovery: "8~12주",
-    anesthesia: "전신 마취",
+    anesthesia: "하반신 마취",
   },
   "Lapidus 절골술": {
     desc: "제1중족-내측 설상골 관절 유합술",
     detail: "제1중족-내측 설상골(TMT) 관절을 유합하여 변형의 근본 원인인 관절 불안정성을 교정합니다. 중증 변형, 과운동성(hypermobility)이 있는 경우, 재발된 무지외반증에 특히 효과적입니다. 재발률이 가장 낮은 술식이지만, 회복 기간이 다소 깁니다.",
     recovery: "10~12주",
-    anesthesia: "전신 마취",
+    anesthesia: "하반신 마취",
   },
   "제1MTP 관절유합술": {
     desc: "제1중족지절 관절 유합술",
     detail: "제1중족지절(MTP) 관절을 유합하여 통증을 제거하고 안정성을 확보합니다. 심한 관절염이 동반된 중증 무지외반증, 이전 수술 후 재발, 또는 관절 파괴가 진행된 경우에 시행합니다. 관절 운동은 제한되지만 통증 해소 효과가 확실합니다.",
     recovery: "10~12주",
-    anesthesia: "전신 마취",
+    anesthesia: "하반신 마취",
   },
 };
 
@@ -187,10 +168,22 @@ function getAngleInfo(type: "hva" | "ima" | "dmaa", value: number) {
   };
 
   const config = configs[type];
-  const range = config.ranges.find((r) => value < r.max) ?? config.ranges[config.ranges.length - 1];
-  const percent = Math.min((value / config.maxDisplay) * 100, 100);
+  // 화면에 보이는 값(소수점 1자리)으로 판정 — 14.96° 가 '15.0°'로 보이면서 '정상'으로 나오지 않도록
+  const shown = round1(value);
+  const range = config.ranges.find((r) => shown < r.max) ?? config.ranges[config.ranges.length - 1];
+  const percent = Math.min((shown / config.maxDisplay) * 100, 100);
 
   return { ...config, status: range, percent };
+}
+
+/** 각도는 소수점 1자리까지만 표시한다 */
+function round1(v: number): number {
+  return Math.round(v * 10) / 10;
+}
+
+/** 문장 속 각도(예: 'HVA: 35.41237°')를 소수점 1자리로 — 예전에 저장된 판단 근거용 */
+function formatAnglesInText(text: string): string {
+  return text.replace(/(\d+\.\d{2,})(?=\s*°)/g, (m) => round1(parseFloat(m)).toFixed(1));
 }
 
 function parseSeverityKey(raw: string | null | undefined): keyof typeof SEVERITY_CONFIG | null {
@@ -376,7 +369,7 @@ function FootReportSection({
                   {surgery.reasons.map((r, i) => (
                     <li key={i} className="flex items-start gap-2 text-[12px] text-gray-600">
                       <span className="text-blue-400 mt-0.5 flex-shrink-0">&#8226;</span>
-                      <span>{r}</span>
+                      <span>{formatAnglesInText(r)}</span>
                     </li>
                   ))}
                 </ul>
@@ -422,11 +415,65 @@ function SectionDivider() {
 
 /* ─── X-ray with SVG measurement overlay ─── */
 
-const MEASUREMENT_COLORS: Record<string, string> = {
-  "HVA": "#e74c3c", "L-HVA": "#e74c3c", "R-HVA": "#e74c3c",
-  "IMA": "#3498db", "L-IMA": "#3498db", "R-IMA": "#3498db",
-  "DMAA": "#27ae60", "L-DMAA": "#27ae60", "R-DMAA": "#27ae60",
-};
+/** 측정 프로그램과 같은 색: 기준선(제1중족골 축)은 노랑, 각도별 두 번째 선은 각도 색 */
+const AXIS_COLOR = "#facc15";
+const ANGLE_COLORS: Record<string, string> = { HVA: "#f2555a", IMA: "#4c8dff", DMAA: "#22c38e" };
+const ANGLE_NAMES: Record<string, string> = { HVA: "무지외반각", IMA: "중족골간각", DMAA: "원위관절면각" };
+const ANGLE_ORDER = ["HVA", "IMA", "DMAA"];
+
+interface SideLegend {
+  key: string;            // "L-" | "R-" | ""
+  label: string;          // 좌측 / 우측 / 측정값
+  onLeft: boolean;        // 이미지에서 왼쪽에 있는 발이면 true → 왼쪽 아래에 표시
+  rows: { base: string; angle: number }[];
+}
+
+/** 측정값을 발별로 묶고, 그 발의 선이 이미지 왼쪽/오른쪽 어디에 있는지 판단한다. */
+function buildLegends(measurements: Record<string, MeasurementPoints>, imageWidth: number): SideLegend[] {
+  const groups = new Map<string, { xs: number[]; rows: { base: string; angle: number }[] }>();
+  for (const [name, m] of Object.entries(measurements)) {
+    if (!m.points || m.points.length < 4 || m.angle == null) continue;
+    const prefix = /^[LR]-/.test(name) ? name.slice(0, 2) : "";
+    const base = name.replace(/^[LR]-/, "");
+    if (!ANGLE_NAMES[base]) continue;
+    const g = groups.get(prefix) ?? { xs: [], rows: [] };
+    g.xs.push(...m.points.map((p) => p[0]));
+    g.rows.push({ base, angle: m.angle });
+    groups.set(prefix, g);
+  }
+  const legends: SideLegend[] = [...groups.entries()].map(([key, g]) => {
+    const avgX = g.xs.reduce((a, b) => a + b, 0) / g.xs.length;
+    return {
+      key,
+      label: key === "L-" ? "좌측 발" : key === "R-" ? "우측 발" : "측정값",
+      onLeft: avgX < imageWidth / 2,
+      rows: g.rows.sort((a, b) => ANGLE_ORDER.indexOf(a.base) - ANGLE_ORDER.indexOf(b.base)),
+    };
+  });
+  // 두 발이 같은 쪽으로 판단되면(드문 경우) 좌측 발을 왼쪽에 둔다
+  if (legends.length === 2 && legends[0].onLeft === legends[1].onLeft) {
+    for (const l of legends) l.onLeft = l.key !== "R-";
+  }
+  return legends;
+}
+
+function LegendBox({ legend }: { legend: SideLegend }) {
+  return (
+    <div className="bg-black/70 backdrop-blur-[2px] rounded-lg px-2.5 py-2 min-w-[112px] shadow-lg">
+      <p className="text-[11px] font-bold text-white mb-1">{legend.label}</p>
+      <ul className="space-y-0.5">
+        {legend.rows.map((r) => (
+          <li key={r.base} className="flex items-center gap-1.5 text-[11px] leading-tight text-white/90">
+            <span className="inline-block w-3 h-[3px] rounded-full shrink-0" style={{ backgroundColor: ANGLE_COLORS[r.base] }} />
+            <span className="font-semibold">{r.base}</span>
+            <span className="hidden min-[440px]:inline text-white/55 text-[10px] whitespace-nowrap">{ANGLE_NAMES[r.base]}</span>
+            <span className="ml-auto pl-2 font-bold tabular-nums whitespace-nowrap">{r.angle.toFixed(1)}°</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function XrayWithOverlay({
   imageUrl,
@@ -439,68 +486,93 @@ function XrayWithOverlay({
   imageWidth?: number;
   imageHeight?: number;
 }) {
-  const hasMeasurements = measurements && Object.keys(measurements).length > 0;
+  const entries = Object.entries(measurements ?? {}).filter(
+    ([, m]) => m.points && m.points.length >= 4 && m.angle != null,
+  );
+  const legends = measurements ? buildLegends(measurements, imageWidth) : [];
+  const leftLegends = legends.filter((l) => l.onLeft);
+  const rightLegends = legends.filter((l) => !l.onLeft);
 
   // viewBox matches actual image pixel dimensions so SVG coordinates align
   const vbW = imageWidth;
   const vbH = imageHeight;
+  const strokeW = vbW / 280;
+  const dotR = vbW / 200;
+  const ext = vbW * 0.04;
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200 bg-black shadow-sm relative">
-      <Image
-        src={imageUrl}
-        alt="X-ray 측정 영상"
-        width={600}
-        height={500}
-        className="w-full object-contain block"
-        unoptimized
-        priority
-      />
-      {hasMeasurements && (
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox={`0 0 ${vbW} ${vbH}`}
-          preserveAspectRatio="xMidYMid meet"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {Object.entries(measurements).map(([name, m]) => {
-            if (!m.points || m.points.length < 4 || m.angle == null) return null;
-            const color = MEASUREMENT_COLORS[name] ?? "#ffffff";
-            const pts = m.points;
-            const strokeW = vbW / 250;
-            const fontSize = vbW / 30;
-            const dotR = vbW / 180;
-
-            // Extend line slightly beyond endpoints
-            const ext = vbW * 0.04;
-
-            return (
-              <g key={name}>
-                {/* Line 1: pts[0] -> pts[1] extended */}
-                <ExtendedLine p0={pts[0]} p1={pts[1]} color={color} strokeW={strokeW} ext={ext} />
-                {/* Line 2: pts[2] -> pts[3] extended */}
-                <ExtendedLine p0={pts[2]} p1={pts[3]} color={color} strokeW={strokeW} ext={ext} />
-
-                {/* Points */}
-                {pts.map((pt, i) => (
-                  <circle key={i} cx={pt[0]} cy={pt[1]} r={dotR} fill={color} />
-                ))}
-
-                {/* Angle label at 4th point */}
-                <AngleLabel
-                  x={pts[3][0]}
-                  y={pts[3][1]}
-                  name={name.replace(/^[LR]-/, "")}
-                  angle={m.angle}
-                  color={color}
-                  fontSize={fontSize}
-                />
+    <div>
+      <div className="rounded-2xl overflow-hidden border border-gray-200 bg-black shadow-sm relative">
+        <Image
+          src={imageUrl}
+          alt="X-ray 측정 영상"
+          width={600}
+          height={500}
+          className="w-full object-contain block"
+          unoptimized
+          priority
+        />
+        {entries.length > 0 && (
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox={`0 0 ${vbW} ${vbH}`}
+            preserveAspectRatio="xMidYMid meet"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* 각도별 두 번째 선 (그 각도의 색) */}
+            {entries.map(([name, m]) => {
+              const color = ANGLE_COLORS[name.replace(/^[LR]-/, "")] ?? "#ffffff";
+              const pts = m.points;
+              return (
+                <g key={name}>
+                  <ExtendedLine p0={pts[2]} p1={pts[3]} color={color} strokeW={strokeW} ext={ext} />
+                  <circle cx={pts[2][0]} cy={pts[2][1]} r={dotR} fill={color} />
+                  <circle cx={pts[3][0]} cy={pts[3][1]} r={dotR} fill={color} />
+                </g>
+              );
+            })}
+            {/* 기준선(제1중족골 축) — 맨 위에 한 번만 보이도록 마지막에 그린다 */}
+            {entries.map(([name, m]) => (
+              <g key={`axis-${name}`}>
+                <ExtendedLine p0={m.points[0]} p1={m.points[1]} color={AXIS_COLOR} strokeW={strokeW} ext={ext} />
+                <circle cx={m.points[0][0]} cy={m.points[0][1]} r={dotR} fill={AXIS_COLOR} />
+                <circle cx={m.points[1][0]} cy={m.points[1][1]} r={dotR} fill={AXIS_COLOR} />
               </g>
-            );
-          })}
-        </svg>
+            ))}
+          </svg>
+        )}
+
+        {/* 각도 값: 이미지 하단 양쪽에 발별로 정리 */}
+        {legends.length > 0 && (
+          <div className="absolute inset-x-0 bottom-0 p-2 flex justify-between items-end gap-2 pointer-events-none">
+            <div className="space-y-1.5">{leftLegends.map((l) => <LegendBox key={l.key} legend={l} />)}</div>
+            <div className="space-y-1.5">{rightLegends.map((l) => <LegendBox key={l.key} legend={l} />)}</div>
+          </div>
+        )}
+      </div>
+      {entries.length > 0 && (
+        <p className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 mt-2">
+          <span className="inline-block w-3 h-[3px] rounded-full" style={{ backgroundColor: AXIS_COLOR }} />
+          노란 선: 기준선(제1중족골 축) · 색 선: 각 각도의 두 번째 선
+        </p>
       )}
     </div>
+  );
+}
+
+/** 측정 각도 안내 문서(/guide/) 링크 — 각도를 어떻게 재는지 궁금한 환자용 */
+function GuideLink({ hash }: { hash: string }) {
+  return (
+    <a
+      href={`/guide/?r=${encodeURIComponent(hash)}`}
+      className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-blue-700"
+    >
+      <span>
+        <span className="block text-[13px] font-bold">각도는 어떻게 재나요?</span>
+        <span className="block text-[11px] text-blue-500 mt-0.5">HVA·IMA·DMAA 측정 방법과 의미 보기</span>
+      </span>
+      <span aria-hidden className="text-lg font-bold">→</span>
+    </a>
   );
 }
 
@@ -537,69 +609,16 @@ function ExtendedLine({
   );
 }
 
-function AngleLabel({
-  x,
-  y,
-  name,
-  angle,
-  color,
-  fontSize,
-}: {
-  x: number;
-  y: number;
-  name: string;
-  angle: number;
-  color: string;
-  fontSize: number;
-}) {
-  const text = `${name}: ${angle.toFixed(1)}°`;
-  const padX = fontSize * 0.4;
-  const padY = fontSize * 0.25;
-  const boxW = text.length * fontSize * 0.58 + padX * 2;
-  const boxH = fontSize + padY * 2;
-  const offX = fontSize * 0.8;
-  const offY = -boxH / 2;
-
-  return (
-    <g>
-      <rect
-        x={x + offX}
-        y={y + offY}
-        width={boxW}
-        height={boxH}
-        rx={boxH * 0.2}
-        ry={boxH * 0.2}
-        fill={color}
-        opacity={0.85}
-      />
-      <text
-        x={x + offX + boxW / 2}
-        y={y + offY + boxH / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="white"
-        fontSize={fontSize}
-        fontWeight="bold"
-        fontFamily="system-ui, sans-serif"
-      >
-        {text}
-      </text>
-    </g>
-  );
-}
-
 /* ─── page ─── */
 
-export default async function ReportPage({ params }: PageProps) {
-  const { hash } = await params;
-
-  const caseData = await prisma.case.findUnique({
-    where: { reportHash: hash },
-    include: { doctor: true },
-  });
-
-  if (!caseData) notFound();
-
+export function ReportView({
+  caseData,
+  imgDim,
+}: {
+  caseData: ReportCase;
+  /** X-ray 원본 크기 (측정선 좌표계). 모르면 null */
+  imgDim: { w: number; h: number } | null;
+}) {
   // parse bilateral data
   let angleData: AngleData = {};
   try {
@@ -638,11 +657,7 @@ export default async function ReportPage({ params }: PageProps) {
       }
     : null;
 
-  const imageUrl =
-    caseData.annotatedImageUrl ||
-    caseData.xrayImageUrl ||
-    `/api/xray/${caseData.id}`;
-  const imgDim = await getImageDimensions(caseData.id);
+  const imageUrl = caseData.xrayUrl;
   const createdDate = formatDate(caseData.createdAt);
 
   // determine overall severity for header gradient
@@ -700,7 +715,7 @@ export default async function ReportPage({ params }: PageProps) {
             <div className="grid grid-cols-3 gap-2.5">
               <InfoCard label="생년월일" value={caseData.patientBirth} />
               <InfoCard label="나이" value={`${caseData.patientAge}세`} />
-              <InfoCard label="등록번호" value={caseData.patientRegNo} />
+              <InfoCard label="측정일" value={createdDate} />
             </div>
             {caseData.painDuration && (
               <div className="mt-2.5 bg-gray-50 rounded-xl border border-gray-100 px-3 py-2.5">
@@ -730,13 +745,13 @@ export default async function ReportPage({ params }: PageProps) {
                 imageWidth={imgDim?.w ?? 550}
                 imageHeight={imgDim?.h ?? 550}
               />
-              <p className="text-[10px] text-gray-400 mt-2 text-center leading-relaxed">
-                위 영상에 표시된 선은 각도 측정을 위한 기준선입니다.
-                <br />
+              <p className="text-[10px] text-gray-400 mt-1 text-center leading-relaxed">
                 HVA, IMA, DMAA 각도가 각각 측정되어 아래 분석에 사용됩니다.
               </p>
+              <GuideLink hash={caseData.reportHash} />
             </section>
           )}
+          {!imageUrl && <GuideLink hash={caseData.reportHash} />}
 
           <SectionDivider />
 

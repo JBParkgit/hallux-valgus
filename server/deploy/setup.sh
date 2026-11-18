@@ -65,6 +65,8 @@ ufw allow 'Nginx Full'
 ufw --force enable
 
 echo "== nginx + https"
+mkdir -p /etc/nginx/snippets "$APP/report-site/report"
+cp "$SRC/deploy/nginx-hv-report.conf" /etc/nginx/snippets/hv-report.conf
 sed "s/__DOMAIN__/$DOMAIN/g" "$SRC/deploy/nginx-hv.conf" > /etc/nginx/sites-available/hv
 ln -sf /etc/nginx/sites-available/hv /etc/nginx/sites-enabled/hv
 rm -f /etc/nginx/sites-enabled/default

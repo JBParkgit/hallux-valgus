@@ -127,7 +127,7 @@ def recommend_surgery(
     dmaa_surgery = config.get("dmaa_surgery", "Akin 절골술") if config else "Akin 절골술"
     age_warning = config.get("age_warning", 60) if config else 60
 
-    reason.append(f"HVA: {hva}°, IMA: {ima}°")
+    reason.append(f"HVA: {hva:.1f}°, IMA: {ima:.1f}°")
     reason.append(f"중증도 분류: {severity}")
 
     # 1단계: 심한 골관절염 확인
@@ -158,7 +158,7 @@ def recommend_surgery(
     # 보조 수술: DMAA 기준 초과 시
     if dmaa is not None and dmaa > dmaa_threshold:
         additional = dmaa_surgery
-        reason.append(f"DMAA {dmaa}° > {dmaa_threshold}°이므로 {dmaa_surgery} 추가 권장")
+        reason.append(f"DMAA {dmaa:.1f}° > {dmaa_threshold}°이므로 {dmaa_surgery} 추가 권장")
 
     # Custom rules
     if config:

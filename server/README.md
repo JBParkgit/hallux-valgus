@@ -49,6 +49,27 @@ scp -r server/hv_server root@<서버IP>:/opt/hv-server/
 ssh root@<서버IP> "systemctl restart hv-server"
 ```
 
+## 4-1. 환자 리포트 사이트 (`/report/{hash}`)
+
+알림톡 '수술 안내서 보기' 버튼이 여는 페이지. 저장소 루트의 Next.js 앱을 **정적 파일**로 빌드해
+이 서버의 nginx가 내보낸다 (Node 실행 불필요). 페이지는 같은 도메인의 `/api/hv/report/{hash}` 를 읽는다.
+
+```
+# PC (저장소 루트)
+npm run build                                   # → out/
+ssh root@<서버IP> "rm -rf /root/hv-src/report-site"
+scp -r out root@<서버IP>:/root/hv-src/report-site
+scp server/deploy/nginx-hv-report.conf server/deploy/enable-report.sh root@<서버IP>:/root/hv-src/deploy/
+
+# 서버 — 최초 1회는 nginx 설정·REPORT_BASE_URL 까지 바꾸고, 이후에는 파일만 교체된다
+ssh root@<서버IP> "bash /root/hv-src/deploy/enable-report.sh /root/hv-src/report-site"
+```
+
+- 리포트 주소: `https://hv.hospitalrun.co.kr/report/{hash}` (서버 `.env` 의 `REPORT_BASE_URL`)
+- 측정 각도 안내 문서: `https://hv.hospitalrun.co.kr/guide/` — 리포트의 '각도는 어떻게 재나요?' 링크 (`src/app/guide/page.tsx`)
+- 화면만 고친 경우에도 위 순서 그대로 (빌드 → 올리기 → `enable-report.sh`)
+- 개발: `npm run dev` 후 `http://localhost:3000/report/{hash}` — `/api/hv/*` 는 `.env` 의 `HV_API_URL` 서버로 전달된다
+
 ## 5. 백업/복구
 
 - 매일 03:30 `/var/backups/hv` 에 DB 덤프 (14일 보관). X-ray는 Vultr 자동 백업(디스크 전체)으로 보호

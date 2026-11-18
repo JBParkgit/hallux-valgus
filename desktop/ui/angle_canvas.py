@@ -90,6 +90,7 @@ class AngleCanvas(QWidget):
         angle_reset(str): an angle became unavailable (a needed line removed).
         active_line_changed(str): the line to draw next changed (e.g. "L-P1").
         lines_changed(): any line was added, moved, or removed.
+        view_changed(): zoom/pan or pan mode changed (for the zoom toolbar).
     """
 
     angle_measured = pyqtSignal(str, float)
@@ -97,6 +98,9 @@ class AngleCanvas(QWidget):
     active_line_changed = pyqtSignal(str)
     lines_changed = pyqtSignal()
     image_changed = pyqtSignal()
+    view_changed = pyqtSignal()
+
+    ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.1, 10.0, 1.25
 
     _POINT_RADIUS = 4.5
     _LINE_WIDTH = 2.5
@@ -107,6 +111,7 @@ class AngleCanvas(QWidget):
         self.setMinimumSize(500, 400)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)
 
         # Image / view
         self._pixmap: QPixmap | None = None
@@ -114,12 +119,15 @@ class AngleCanvas(QWidget):
         self._pan_offset = QPointF(0, 0)
         self._is_panning = False
         self._pan_start = QPointF()
+        self._fit_zoom = 1.0      # zoom that fits the whole image (= 100% on the toolbar)
+        self._pan_mode = False    # '이동' 버튼: 왼쪽 드래그로 이미지 이동
 
         # Lines & angles
         self._prefixes: list[str] = [""]
         self._lines: dict[str, list[QPointF]] = {}  # line_id → [p0, p1]
         self._angles: dict[str, float | None] = {}
-        self._active_line: str = "M1"
+        # "" = 아무 선도 선택 안 됨 ('측정 시작'이나 선 버튼을 눌러야 선택됨)
+        self._active_line: str = ""
 
         # Interaction state
         self._mouse_img_pos: QPointF | None = None
@@ -127,6 +135,10 @@ class AngleCanvas(QWidget):
         self._dragging: tuple[str, int] | None = None  # (line_id, endpoint index)
         self._undo: list[tuple[str, list[QPointF] | None]] = []  # (line_id, previous)
         self._read_only = False
+        # '측정 시작'을 누르거나 선을 그린 뒤에만 단계별 지시문을 보여 준다
+        self._measure_started = False
+        # Esc 로 측정을 중단한 직후 (지시문에 '중단했습니다' 표시)
+        self._stopped = False
 
         self._reset_angle_table()
 
@@ -138,7 +150,7 @@ class AngleCanvas(QWidget):
         self._lines.clear()
         self._undo.clear()
         self._reset_angle_table()
-        self.active_line = self._prefixes[0] + "M1"
+        self.active_line = ""
 
     def _reset_angle_table(self) -> None:
         self._angles = {p + a: None for p in self._prefixes for a in ANGLE_LINES}
@@ -154,9 +166,11 @@ class AngleCanvas(QWidget):
 
     @active_line.setter
     def active_line(self, line_id: str) -> None:
-        if line_id not in self.all_line_ids():
+        if line_id and line_id not in self.all_line_ids():
             return
         self._draft_start = None
+        if line_id:
+            self._stopped = False
         if line_id != self._active_line:
             self._active_line = line_id
             self.active_line_changed.emit(line_id)
@@ -196,17 +210,44 @@ class AngleCanvas(QWidget):
             self._after_lines_changed()
             self.active_line = line_id
 
+    def start_measuring(self) -> None:
+        """'측정 시작' 버튼: 하단 지시문을 단계 안내로 바꾼다."""
+        self._measure_started = True
+        self._stopped = False
+        self.update()
+
+    def stop_measuring(self) -> bool:
+        """Esc: 측정 중단 — 긋던 선은 취소하고 선 선택을 해제한다 (그린 선은 유지).
+
+        Returns True if there was a measurement in progress to stop.
+        """
+        if self._dragging is not None:
+            return False  # 끝점을 끄는 중에는 무시
+        was_measuring = bool(self._active_line) or self._draft_start is not None
+        self._draft_start = None
+        if was_measuring:
+            self._stopped = True
+            self.active_line = ""
+        self.update()
+        return was_measuring
+
     def reset_all(self) -> None:
+        self._measure_started = False
+        self._stopped = False
         self._lines.clear()
         self._undo.clear()
         self._draft_start = None
         self._dragging = None
         self._pixmap = None
         self._zoom = 1.0
+        self._fit_zoom = 1.0
         self._pan_offset = QPointF(0, 0)
+        self._pan_mode = False
+        self.setCursor(Qt.CursorShape.CrossCursor)
         self._recalc_angles()
+        self.view_changed.emit()
         self.lines_changed.emit()
-        self.active_line = self._prefixes[0] + "M1"
+        self.active_line = ""
         self.update()
 
     def undo_last(self) -> None:
@@ -254,17 +295,55 @@ class AngleCanvas(QWidget):
         return True
 
     def paste_from_clipboard(self) -> bool:
+        """Paste an X-ray: image data (PACS/screenshot copy) or a copied image file."""
         clipboard = QApplication.clipboard()
-        if clipboard is None:
+        if clipboard is None or self._read_only:
             return False
         mime = clipboard.mimeData()
-        if self._read_only or mime is None or not mime.hasImage():
+        if mime is None:
             return False
-        image = clipboard.image()
-        if image and not image.isNull():
-            self.set_image(QPixmap.fromImage(image))
-            return True
+        if mime.hasImage():
+            image = clipboard.image()
+            if image and not image.isNull():
+                self.set_image(QPixmap.fromImage(image))
+                return True
+        # 탐색기에서 이미지 파일을 Ctrl+C 한 경우
+        return self._load_first_image_url(mime)
+
+    def _load_first_image_url(self, mime) -> bool:
+        if not mime.hasUrls():
+            return False
+        for url in mime.urls():
+            if url.isLocalFile():
+                px = QPixmap(url.toLocalFile())
+                if not px.isNull():
+                    self.set_image(px)
+                    return True
         return False
+
+    # Drag & drop an image file onto the canvas
+    def dragEnterEvent(self, event) -> None:  # type: ignore[override]
+        mime = event.mimeData()
+        if not self._read_only and mime is not None and (mime.hasUrls() or mime.hasImage()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        mime = event.mimeData()
+        ok = False
+        if not self._read_only and mime is not None:
+            if mime.hasImage():
+                image = mime.imageData()
+                if image is not None and not image.isNull():
+                    self.set_image(QPixmap.fromImage(image))
+                    ok = True
+            if not ok:
+                ok = self._load_first_image_url(mime)
+        if ok:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def load_image_from_file(self, path: str) -> bool:
         import os
@@ -355,13 +434,14 @@ class AngleCanvas(QWidget):
                     self._lines[prefix + second] = [QPointF(*pts[2]), QPointF(*pts[3])]
 
         self._recalc_angles(emit=False)
+        self._measure_started = bool(self._lines)
         changed: list[str] = []
         for name, value in self._angles.items():
             saved = (data.get(name) or {}).get("angle")
             if value is not None and saved is not None and abs(value - saved) > 0.05:
                 changed.append(name)
         self.lines_changed.emit()
-        self._advance_from(self._prefixes[0] + "M1", include_self=True)
+        self.active_line = ""
         self.update()
         return changed
 
@@ -403,31 +483,55 @@ class AngleCanvas(QWidget):
             if not self.has_line(prefix + k):
                 self.active_line = prefix + k
                 return
-        # This side is done → continue on the next side (e.g. left → right)
-        idx = self._prefixes.index(prefix)
-        for other in self._prefixes[idx + 1:] + self._prefixes[:idx]:
-            for k in LINE_ORDER:
-                if not self.has_line(other + k):
-                    self.active_line = other + k
-                    return
-        if include_self:
-            self.active_line = line_id
+        # 이 발의 선을 모두 그림 → 여기서 측정을 마친다.
+        # 반대쪽 발로 자동으로 넘어가지 않는다 (한쪽만 측정하고 끝낼 수 있도록).
+        self.active_line = ""
 
-    def guide_text(self) -> str:
-        if self._pixmap is None:
-            return ""
+    def side_complete(self, prefix: str) -> bool:
+        return all(self.has_line(prefix + k) for k in LINE_ORDER)
+
+    def guide_lines(self) -> tuple[str, str]:
+        """하단 중앙 지시문 (큰 글씨 본문, 작은 글씨 보조 설명)."""
+        has_image = self._pixmap is not None and not self._pixmap.isNull()
         if self._read_only:
-            return "읽기 전용  ·  휠: 확대/축소   가운데 버튼 드래그: 이동"
+            return ("읽기 전용", "휠: 확대/축소   ·   가운데 버튼 드래그: 이동") if has_image else ("", "")
+        if not self._measure_started and not self._lines:
+            if not has_image:
+                return "", ""  # 가운데 '붙여넣기' 안내가 대신한다
+            return "‘측정 시작’ 버튼을 누르세요", "좌측 또는 우측 발 위의 버튼에서 시작합니다"
+        if not has_image:
+            return "먼저 X-ray 이미지를 붙여넣으세요", "Ctrl+V   ·   이미지 파일을 끌어다 놓아도 됩니다"
+        if all(self.has_line(lid) for lid in self.all_line_ids()):
+            scope = "양측 " if len(self._prefixes) > 1 else ""
+            return f"{scope}측정 완료", "점을 드래그해 조정하거나, 선 버튼을 골라 다시 그릴 수 있습니다"
+        if not self._active_line and self._stopped:
+            return "측정을 중단했습니다", "그린 선은 그대로 남아 있습니다   ·   다시 하려면 ‘측정 시작’을 누르세요"
+        if not self._active_line:
+            names = {"L-": "좌측", "R-": "우측"}
+            done = [p for p in self._prefixes if self.side_complete(p)]
+            if len(done) == 1 and len(self._prefixes) > 1:
+                other = next(p for p in self._prefixes if p != done[0])
+                return (
+                    f"{names.get(done[0], '')} 측정 완료",
+                    f"{names.get(other, '')}도 측정하려면 ‘{names.get(other, '')} 측정 시작’을 누르세요"
+                    "   ·   한쪽만 측정한다면 그대로 저장하면 됩니다",
+                )
+            return "‘측정 시작’ 버튼을 누르세요", "이어서 측정할 발의 버튼을 누르면 다음 선부터 그립니다"
         prefix, key = split_line_id(self._active_line)
         side = {"L-": "좌측 ", "R-": "우측 "}.get(prefix, "")
         step = LINE_ORDER.index(key) + 1
         label = LINE_LABELS[key]
-        if all(self.has_line(lid) for lid in self.all_line_ids()):
-            scope = "양측 " if len(self._prefixes) > 1 else ""
-            return f"{scope}측정 완료  ·  점을 드래그해 조정하거나 선을 골라 다시 그릴 수 있습니다"
         if self.has_line(self._active_line):
-            return f"{side}{label}을 다시 그리려면 드래그하세요"
-        return f"{step}/4  {side}{label}을 드래그로 그리세요"
+            return f"{side}{label} 다시 그리기", "드래그하면 이 선을 새로 그립니다   ·   Ctrl+Z 되돌리기   ·   Esc 중단"
+        return (
+            f"{step}/4   {side}{label}을 그리세요",
+            "드래그로 선 긋기   ·   끝점을 끌어 조정   ·   Ctrl+Z 되돌리기   ·   Esc 측정 중단",
+        )
+
+    def guide_text(self) -> str:
+        """Single-line form of the guide (kept for callers/tests)."""
+        main, sub = self.guide_lines()
+        return f"{main}  ·  {sub}" if main and sub else main
 
     # ── Coordinate transforms ───────────────────────────────────
 
@@ -449,9 +553,49 @@ class AngleCanvas(QWidget):
         w_ratio = self.width() / self._pixmap.width()
         h_ratio = self.height() / self._pixmap.height()
         self._zoom = min(w_ratio, h_ratio) * 0.95
+        self._fit_zoom = self._zoom
         img_w = self._pixmap.width() * self._zoom
         img_h = self._pixmap.height() * self._zoom
         self._pan_offset = QPointF((self.width() - img_w) / 2, (self.height() - img_h) / 2)
+        self.view_changed.emit()
+
+    # ── View controls (zoom toolbar) ────────────────────────────
+
+    def _zoom_at(self, factor: float, anchor: QPointF) -> None:
+        if self._pixmap is None or self._pixmap.isNull():
+            return
+        old_zoom = self._zoom
+        self._zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, self._zoom * factor))
+        self._pan_offset = anchor - (anchor - self._pan_offset) * (self._zoom / old_zoom)
+        self.update()
+        self.view_changed.emit()
+
+    def zoom_in(self) -> None:
+        self._zoom_at(self.ZOOM_STEP, QPointF(self.width() / 2, self.height() / 2))
+
+    def zoom_out(self) -> None:
+        self._zoom_at(1 / self.ZOOM_STEP, QPointF(self.width() / 2, self.height() / 2))
+
+    def fit_view(self) -> None:
+        self._fit_image()
+        self.update()
+
+    def zoom_percent(self) -> int:
+        """Zoom relative to 'fit whole image' (fit = 100%)."""
+        return round(self._zoom / self._fit_zoom * 100) if self._fit_zoom else 100
+
+    @property
+    def pan_mode(self) -> bool:
+        return self._pan_mode
+
+    def set_pan_mode(self, on: bool) -> None:
+        if on == self._pan_mode:
+            return
+        self._pan_mode = on
+        self._draft_start = None
+        self.setCursor(Qt.CursorShape.OpenHandCursor if on else Qt.CursorShape.CrossCursor)
+        self.update()
+        self.view_changed.emit()
 
     def _hit_test(self, widget_pos: QPointF) -> tuple[str, int] | None:
         """Nearest endpoint of an existing line within the hit radius.
@@ -460,7 +604,7 @@ class AngleCanvas(QWidget):
         (its start often sits right on another line's endpoint, e.g. the MTP
         joint), so no endpoint is grabbed then.
         """
-        if not self.has_line(self._active_line):
+        if self._active_line and not self.has_line(self._active_line):
             return None
         best: tuple[float, tuple[str, int]] | None = None
         for line_id, pts in self._lines.items():
@@ -481,20 +625,20 @@ class AngleCanvas(QWidget):
         if event is None:
             return
         ctrl = event.modifiers() & Qt.KeyboardModifier.ControlModifier
-        if event.key() == Qt.Key.Key_V and ctrl:
-            self.paste_from_clipboard()
-        elif event.key() == Qt.Key.Key_Z and ctrl:
+        # Ctrl+V 는 화면(CaseWorkflowWidget)의 단축키가 처리한다 (실패 시 안내 포함)
+        if event.key() == Qt.Key.Key_Z and ctrl:
             self.undo_last()
-        elif event.key() == Qt.Key.Key_Escape and self._draft_start is not None:
-            self._draft_start = None
-            self.update()
+        # Esc(측정 중단)도 화면의 단축키가 처리한다
         else:
             super().keyPressEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
-        if event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
+        pan_button = event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton) or (
+            self._pan_mode and event.button() == Qt.MouseButton.LeftButton
+        )
+        if pan_button:
             self._is_panning = True
             self._pan_start = event.position() - self._pan_offset
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -510,6 +654,8 @@ class AngleCanvas(QWidget):
             self.setCursor(Qt.CursorShape.SizeAllCursor)
             return
 
+        if not self._active_line:
+            return  # 선이 선택되지 않음 → '측정 시작'을 눌러야 그린다 (하단 지시문 참고)
         self._draft_start = self._widget_to_image(event.position())
         self._mouse_img_pos = self._draft_start
         self.update()
@@ -532,7 +678,9 @@ class AngleCanvas(QWidget):
             self.update()
             return
 
-        if self._read_only:
+        if self._pan_mode:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self._read_only:
             self.setCursor(Qt.CursorShape.ArrowCursor)
         elif self._draft_start is not None:
             self.update()
@@ -544,9 +692,10 @@ class AngleCanvas(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
-        if event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
+        if self._is_panning:
             self._is_panning = False
-            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setCursor(Qt.CursorShape.OpenHandCursor if self._pan_mode else Qt.CursorShape.CrossCursor)
+            self.view_changed.emit()
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
@@ -576,18 +725,15 @@ class AngleCanvas(QWidget):
         previous = self._lines.get(line_id)
         self._undo.append((line_id, [QPointF(p) for p in previous] if previous else None))
         self._lines[line_id] = [start, end]
+        self._measure_started = True
         self._after_lines_changed()
         self._advance_from(line_id)
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         if event is None or self._pixmap is None:
             return
-        old_zoom = self._zoom
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
-        self._zoom = max(0.1, min(10.0, self._zoom * factor))
-        mouse_pos = event.position()
-        self._pan_offset = mouse_pos - (mouse_pos - self._pan_offset) * (self._zoom / old_zoom)
-        self.update()
+        self._zoom_at(factor, event.position())
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -607,6 +753,7 @@ class AngleCanvas(QWidget):
 
         if self._pixmap is None or self._pixmap.isNull():
             self._draw_placeholder(painter)
+            self._draw_guide(painter)  # '측정 시작' 후 이미지가 없으면 붙여넣기 안내
             painter.end()
             return
 
@@ -666,23 +813,49 @@ class AngleCanvas(QWidget):
         )
 
     def _draw_guide(self, painter: QPainter) -> None:
-        text = self.guide_text()
-        if not text:
+        """하단 중앙의 큰 지시문 (본문 + 보조 설명 두 줄)."""
+        main, sub = self.guide_lines()
+        if not main:
             return
-        painter.setFont(theme.font(10, QFont.Weight.DemiBold))
-        fm = painter.fontMetrics()
-        dot = 10
-        w = fm.horizontalAdvance(text) + 40 + dot
-        h = 34
-        r = QRectF((self.width() - w) / 2, self.height() - h - 16, w, h)
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
-        painter.setBrush(QColor(10, 14, 23, 215))
-        painter.drawRoundedRect(r, h / 2, h / 2)
+        main_font = theme.font(15, QFont.Weight.Bold)
+        sub_font = theme.font(10, QFont.Weight.DemiBold)
+        max_text_w = max(120, self.width() - 120)
+        painter.setFont(main_font)
+        fm_main = painter.fontMetrics()
+        main = fm_main.elidedText(main, Qt.TextElideMode.ElideRight, max_text_w)
+        painter.setFont(sub_font)
+        fm_sub = painter.fontMetrics()
+        sub = fm_sub.elidedText(sub, Qt.TextElideMode.ElideRight, max_text_w) if sub else ""
+
+        dot = 14
+        pad_x = 28
+        text_w = max(fm_main.horizontalAdvance(main), fm_sub.horizontalAdvance(sub) if sub else 0)
+        w = text_w + pad_x * 2 + dot + 14
+        h = fm_main.height() + (fm_sub.height() + 6 if sub else 0) + 26
+        r = QRectF((self.width() - w) / 2, self.height() - h - 22, w, h)
+
+        painter.setPen(QPen(QColor(255, 255, 255, 60), 1.5))
+        painter.setBrush(QColor(10, 14, 23, 230))
+        painter.drawRoundedRect(r, 16, 16)
+
+        if self._read_only or not self._measure_started or not self._active_line:
+            dot_color = QColor(theme.MUTED) if self._read_only else QColor(theme.PRIMARY)
+        else:
+            dot_color = line_color(self._active_line)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(theme.MUTED) if self._read_only else line_color(self._active_line))
-        painter.drawEllipse(QPointF(r.left() + 18, r.center().y()), dot / 2, dot / 2)
-        painter.setPen(QColor(255, 255, 255, 235))
-        painter.drawText(r.adjusted(18 + dot, 0, 0, 0), Qt.AlignmentFlag.AlignCenter, text)
+        painter.setBrush(dot_color)
+        text_left = r.left() + pad_x + dot + 14
+        main_rect = QRectF(text_left, r.top() + 13, text_w, fm_main.height())
+        painter.drawEllipse(QPointF(r.left() + pad_x + dot / 2, main_rect.center().y()), dot / 2, dot / 2)
+
+        painter.setFont(main_font)
+        painter.setPen(QColor(255, 255, 255, 245))
+        painter.drawText(main_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, main)
+        if sub:
+            painter.setFont(sub_font)
+            painter.setPen(QColor(255, 255, 255, 165))
+            sub_rect = QRectF(text_left, main_rect.bottom() + 6, text_w, fm_sub.height())
+            painter.drawText(sub_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, sub)
 
     def _draw_placeholder(self, painter: QPainter) -> None:
         c = QRectF(self.rect()).center()

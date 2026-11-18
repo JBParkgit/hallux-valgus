@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPixmap
+from PyQt6.QtGui import QColor, QFont, QKeySequence, QPixmap, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -69,6 +69,8 @@ class CaseWorkflowWidget(QWidget):
     """3-column case widget: left side | shared canvas | right side."""
 
     case_saved = pyqtSignal()
+    new_case_requested = pyqtSignal()   # '+ 새 케이스' 버튼 (MainWindow 가 확인 후 초기화)
+    case_title_changed = pyqtSignal(str)  # 작업 중인 환자 이름 ('' = 없음)
 
     SURGERY_OPTIONS = [
         "Chevron 절골술",
@@ -103,6 +105,8 @@ class CaseWorkflowWidget(QWidget):
             "left": None, "right": None,
         }
         self._panels: dict[str, dict[str, Any]] = {}
+        # '측정 시작'을 누른 발 (선을 하나도 안 그렸어도 '측정 중'으로 표시)
+        self._started_side: str | None = None
         self._dirty: bool = False
         # X-ray changed since last upload to the server
         self._xray_dirty: bool = False
@@ -191,6 +195,7 @@ class CaseWorkflowWidget(QWidget):
         # Build overlay mode buttons on canvas after panels exist
         self._build_mode_buttons("left")
         self._build_mode_buttons("right")
+        self._build_view_toolbar()
 
         # Reposition overlays when canvas resizes
         self._angle_canvas.installEventFilter(self)
@@ -205,6 +210,17 @@ class CaseWorkflowWidget(QWidget):
         self._angle_canvas.set_sides(["L-", "R-"])
         self._sync_line_buttons(self._angle_canvas.active_line)
         self._on_lines_changed()
+
+        # Ctrl+V 로 X-ray 붙여넣기 — 캔버스에 포커스가 없어도 이 화면 어디서든 동작.
+        # 글자 입력칸(환자 정보·메모 등)은 자기 붙여넣기를 먼저 처리하므로 그대로 글자가 들어간다.
+        paste_sc = QShortcut(QKeySequence(QKeySequence.StandardKey.Paste), self)
+        paste_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        paste_sc.activated.connect(self._paste_xray)
+
+        # Esc 로 측정 중단 — 긋던 선 취소 + 선 선택 해제 (그린 선은 유지)
+        stop_sc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        stop_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        stop_sc.activated.connect(self._stop_measurement)
 
     # ── Patient bar ──────────────────────────────────────────────
 
@@ -271,8 +287,17 @@ class CaseWorkflowWidget(QWidget):
 
         # Recalculate age when birth changes
         self._pt_birth.textChanged.connect(self._on_birth_changed)
+        # 메뉴의 '케이스 작업 · 환자이름' 표시용
+        self._pt_name.textChanged.connect(self._emit_case_title)
 
         ly.addStretch()
+
+        new_btn = QPushButton("  새 케이스")
+        new_btn.setIcon(theme.icon("plus", "#FFFFFF", 16))
+        new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        new_btn.setToolTip("빈 케이스로 새로 시작합니다 (저장하지 않은 내용이 있으면 먼저 확인합니다)")
+        new_btn.clicked.connect(self.new_case_requested.emit)
+        ly.addWidget(new_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         reload_btn = QPushButton("  환자 불러오기")
         self._reload_btn = reload_btn
@@ -315,16 +340,42 @@ class CaseWorkflowWidget(QWidget):
         col_ly.setContentsMargins(10, 10, 10, 0)
         col_ly.setSpacing(5)
 
-        side_cap = QLabel("좌측 발" if side == "left" else "우측 발")
-        side_cap.setStyleSheet(
-            "color: rgba(255,255,255,0.55); font-size: 11px; font-weight: 600; padding: 0 2px 2px 2px;"
-        )
-        side_cap.setAlignment(
-            Qt.AlignmentFlag.AlignLeft if side == "left" else Qt.AlignmentFlag.AlignRight
-        )
-        col_ly.addWidget(side_cap)
-
         _CLR = 20
+
+        # 측정 시작 / 측정 중 / 측정 완료 — 이 발의 다음 선부터 그리게 한다
+        start_btn = QPushButton()
+        start_btn.setFixedSize(210, 50)
+        start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        start_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.PRIMARY}; color: white;
+                font-weight: 800; font-size: 16px; padding: 0 12px;
+                border-radius: 11px; border: 2px solid rgba(255,255,255,0.22);
+                /* 스타일시트 높이가 setFixedSize 보다 우선하므로 여기서 높이를 고정 */
+                min-height: 46px; max-height: 46px;
+            }}
+            QPushButton:hover {{ background-color: #2449C4; }}
+            QPushButton[state="measuring"] {{
+                background-color: rgba(12,17,28,0.88); color: white;
+                border: 2px solid {theme.PRIMARY};
+            }}
+            QPushButton[state="done"] {{
+                background-color: {theme.SUCCESS}; color: white;
+                border: 2px solid rgba(255,255,255,0.28);
+            }}
+            QPushButton[state="done"]:hover {{ background-color: #0B8A5F; }}
+            QPushButton:disabled {{
+                background-color: rgba(12,17,28,0.60); color: rgba(255,255,255,0.45);
+                border: 2px solid rgba(255,255,255,0.06);
+            }}
+        """)
+        start_btn.clicked.connect(lambda checked=False, s=side: self._start_side_measurement(s))
+        p["start_btn"] = start_btn
+        col_ly.addWidget(
+            start_btn, 0,
+            Qt.AlignmentFlag.AlignLeft if side == "left" else Qt.AlignmentFlag.AlignRight,
+        )
+        col_ly.addSpacing(6)
         _CLR_HIDDEN_SS = f"""
             QPushButton {{
                 background-color: transparent; color: transparent;
@@ -427,6 +478,87 @@ class CaseWorkflowWidget(QWidget):
             ow = self._right_overlay.sizeHint().width()
             self._right_overlay.move(w - ow - 4, 4)
             self._right_overlay.adjustSize()
+        if hasattr(self, "_view_toolbar"):
+            tb = self._view_toolbar
+            tb.adjustSize()
+            c = self._angle_canvas
+            tb.move(c.width() - tb.width() - 14, max(0, (c.height() - tb.height()) // 2))
+            tb.raise_()
+
+    # ── View toolbar (확대 / 축소 / 맞춤 / 이동) ─────────────────
+
+    def _build_view_toolbar(self) -> None:
+        """Vertical toolbar at the right-middle of the canvas."""
+        c = self._angle_canvas
+        tb = QFrame(c)
+        tb.setObjectName("viewToolbar")
+        tb.setStyleSheet(
+            "QFrame#viewToolbar { background-color: rgba(12,17,28,0.88); "
+            "border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; }"
+        )
+        ly = QVBoxLayout(tb)
+        ly.setContentsMargins(6, 6, 6, 6)
+        ly.setSpacing(4)
+
+        btn_ss = f"""
+            QPushButton {{
+                background-color: transparent; color: white;
+                font-weight: 700; font-size: 20px; padding: 0;
+                border: 1px solid transparent; border-radius: 8px;
+                min-height: 40px; max-height: 40px; min-width: 52px; max-width: 52px;
+            }}
+            QPushButton:hover {{ background-color: rgba(255,255,255,0.12); }}
+            QPushButton:pressed {{ background-color: rgba(255,255,255,0.20); }}
+            QPushButton:checked {{
+                background-color: {theme.PRIMARY}; border: 1px solid rgba(255,255,255,0.35);
+            }}
+            QPushButton:disabled {{ color: rgba(255,255,255,0.28); background-color: transparent; }}
+        """
+        small_ss = btn_ss.replace("font-size: 20px", "font-size: 13px")
+
+        def make(text: str, tip: str, slot, *, small: bool = False, checkable: bool = False) -> QPushButton:
+            b = QPushButton(text)
+            b.setStyleSheet(small_ss if small else btn_ss)
+            b.setToolTip(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            b.setCheckable(checkable)
+            (b.toggled if checkable else b.clicked).connect(slot)
+            ly.addWidget(b)
+            return b
+
+        self._zoom_in_btn = make("+", "확대  (마우스 휠 위로)", lambda *_: c.zoom_in())
+        self._zoom_lbl = QLabel("100%")
+        self._zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._zoom_lbl.setStyleSheet(
+            "color: rgba(255,255,255,0.75); font-size: 11px; font-weight: 700; background: transparent;"
+        )
+        self._zoom_lbl.setToolTip("화면에 맞춘 크기 = 100%")
+        ly.addWidget(self._zoom_lbl)
+        self._zoom_out_btn = make("−", "축소  (마우스 휠 아래로)", lambda *_: c.zoom_out())
+        self._fit_btn = make("맞춤", "이미지 전체가 보이게 맞추기", lambda *_: c.fit_view(), small=True)
+        self._pan_btn = make(
+            "이동", "이동 모드: 켜면 왼쪽 드래그로 이미지를 옮깁니다 (다시 누르거나 Esc로 끄기)\n"
+            "가운데·오른쪽 버튼 드래그로도 옮길 수 있습니다",
+            lambda on: c.set_pan_mode(on), small=True, checkable=True,
+        )
+
+        self._view_toolbar = tb
+        c.view_changed.connect(self._update_view_toolbar)
+        self._update_view_toolbar()
+        tb.show()
+        self._position_overlay_buttons()
+
+    def _update_view_toolbar(self) -> None:
+        c = self._angle_canvas
+        has_image = c.has_image()
+        for b in (self._zoom_in_btn, self._zoom_out_btn, self._fit_btn, self._pan_btn):
+            b.setEnabled(has_image)
+        self._zoom_lbl.setText(f"{c.zoom_percent()}%" if has_image else "–")
+        if self._pan_btn.isChecked() != c.pan_mode:
+            self._pan_btn.blockSignals(True)
+            self._pan_btn.setChecked(c.pan_mode)
+            self._pan_btn.blockSignals(False)
 
     # ── Side panel (left or right foot) ──────────────────────────
 
@@ -476,7 +608,14 @@ class CaseWorkflowWidget(QWidget):
         ly.addSpacing(4)
 
         # ── 1. 측정 각도 ────────────────────────────────────────
-        ly.addWidget(_section_title("측정 각도"))
+        meas_head = QHBoxLayout()
+        meas_head.addWidget(_section_title("측정 각도"))
+        meas_head.addStretch()
+        meas_status = QLabel()
+        meas_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        meas_head.addWidget(meas_status)
+        p["measure_status"] = meas_status
+        ly.addLayout(meas_head)
         p["angle_displays"] = {}
         hints = {"HVA": "정상 < 15°", "IMA": "정상 < 9°", "DMAA": "정상 < 10°"}
         names = {"HVA": "무지외반각", "IMA": "중족골간각", "DMAA": "원위관절면각"}
@@ -661,6 +800,7 @@ class CaseWorkflowWidget(QWidget):
 
         for label, icon_name, variant, handler, attr in [
             ("EMR 복사", "copy", "secondary", self._copy_to_emr, "_emr_btn"),
+            ("리포트 보기", "search", "secondary", self._open_report, "_report_btn"),
             ("알림톡 발송", "send", "secondary", self._save_and_send, "_send_btn"),
             ("저장", "save", "", self._save_only, "_save_btn"),
         ]:
@@ -757,6 +897,9 @@ class CaseWorkflowWidget(QWidget):
 
     def _select_line(self, line_id: str) -> None:
         """Overlay button click: draw (or redraw) this line next."""
+        # 선을 직접 고른 것도 그 발의 측정을 시작한 것으로 본다
+        self._started_side = "left" if line_id.startswith("L-") else "right"
+        self._angle_canvas.start_measuring()
         self._angle_canvas.active_line = line_id
         self._sync_line_buttons(self._angle_canvas.active_line)
         self._angle_canvas.setFocus()
@@ -768,6 +911,89 @@ class CaseWorkflowWidget(QWidget):
                 continue
             for key, btn in p["line_btns"].items():
                 btn.setChecked(prefix + key == active_line)
+        self._update_measure_status()
+
+    # ── 좌/우 측정 시작 · 완료 표시 ─────────────────────────────
+
+    def _side_lines_done(self, side: str) -> int:
+        prefix = "L-" if side == "left" else "R-"
+        return sum(self._angle_canvas.has_line(prefix + k) for k in LINE_ORDER)
+
+    def _measured_sides(self) -> list[str]:
+        """선을 하나라도 그린 발 (저장·EMR 복사 대상). 아무것도 안 그렸으면 양쪽."""
+        measured = [s for s in ("left", "right") if self._side_lines_done(s) > 0]
+        return measured or self._get_active_sides()
+
+    def _measured_foot_side(self) -> str:
+        measured = [s for s in ("left", "right") if self._side_lines_done(s) > 0]
+        return measured[0] if len(measured) == 1 else "bilateral"
+
+    def _emit_case_title(self, *_: Any) -> None:
+        name = self._pt_name.text().strip()
+        # '(환자 없음)', '(SMS_Patient.txt 없음)' 같은 안내 문구는 이름이 아니다
+        self.case_title_changed.emit("" if not name or name.startswith("(") or name == "-" else name)
+
+    def _stop_measurement(self) -> None:
+        """Esc: 이동 모드를 끄고, 진행 중인 측정을 중단한다."""
+        if self._angle_canvas.pan_mode:
+            self._angle_canvas.set_pan_mode(False)
+        if self._read_only:
+            return
+        if self._angle_canvas.stop_measuring():
+            self._started_side = None
+            self._update_measure_status()
+
+    def _start_side_measurement(self, side: str) -> None:
+        """'측정 시작': 이 발에서 아직 안 그린 첫 선(모두 그렸으면 M1)을 그리게 한다."""
+        prefix = "L-" if side == "left" else "R-"
+        self._started_side = side
+        self._angle_canvas.start_measuring()
+        target = next(
+            (prefix + k for k in LINE_ORDER if not self._angle_canvas.has_line(prefix + k)),
+            prefix + LINE_ORDER[0],
+        )
+        self._select_line(target)
+
+    def _update_measure_status(self) -> None:
+        total = len(LINE_ORDER)
+        active = self._angle_canvas.active_line
+        for side, prefix in (("left", "L-"), ("right", "R-")):
+            p = self._panels.get(side)
+            if not p or "start_btn" not in p:
+                continue
+            side_kr = "좌측" if side == "left" else "우측"
+            done = self._side_lines_done(side)
+            if done == total:
+                state, text = "done", f"✓  {side_kr} 측정 완료"
+                tip = "4개 선을 모두 그렸습니다. 누르면 처음 선(M1)부터 다시 확인할 수 있습니다."
+            elif active.startswith(prefix) and (done > 0 or self._started_side == side):
+                state, text = "measuring", f"{side_kr} 측정 중  {done}/{total}"
+                tip = "캔버스에서 드래그해 선을 그리세요."
+            else:
+                state = "start"
+                text = f"{side_kr} 측정 시작" if done == 0 else f"{side_kr} 측정 계속  {done}/{total}"
+                tip = f"{side_kr} 발의 다음 선부터 그립니다."
+            btn = p["start_btn"]
+            btn.setText(text)
+            btn.setToolTip(tip)
+            if btn.property("state") != state:
+                btn.setProperty("state", state)
+                theme.repolish(btn)
+
+            lbl = p.get("measure_status")
+            if lbl is not None:
+                if done == total:
+                    lbl.setText("✓ 측정 완료")
+                    lbl.setStyleSheet(
+                        f"color: {theme.SUCCESS}; background-color: {theme.SUCCESS_SOFT}; "
+                        "font-size: 11px; font-weight: 700; border-radius: 9px; padding: 2px 9px;"
+                    )
+                else:
+                    lbl.setText("측정 전" if done == 0 else f"측정 중 {done}/{total}")
+                    lbl.setStyleSheet(
+                        f"color: {theme.MUTED}; background-color: {theme.SURFACE_ALT}; "
+                        "font-size: 11px; font-weight: 600; border-radius: 9px; padding: 2px 9px;"
+                    )
 
     def _on_lines_changed(self) -> None:
         """Refresh line buttons (done state, clear badges) after any line change."""
@@ -781,6 +1007,7 @@ class CaseWorkflowWidget(QWidget):
                     btn.setProperty("done", done)
                     theme.repolish(btn)
                 self._show_clear_btn(p["clear_btns"][key], done)
+        self._update_measure_status()
         self._mark_dirty()
 
     def _resolve_side_and_base(self, name: str) -> tuple[str | None, str | None]:
@@ -895,6 +1122,8 @@ class CaseWorkflowWidget(QWidget):
             p["override_reason"].setEnabled(override)
             for btn in p.get("line_btns", {}).values():
                 btn.setEnabled(editable)
+            if "start_btn" in p:
+                p["start_btn"].setEnabled(editable)
             for key, btn in p.get("clear_btns", {}).items():
                 self._show_clear_btn(btn, editable and btn.isEnabled())
         if editable:
@@ -905,10 +1134,14 @@ class CaseWorkflowWidget(QWidget):
             return
         if self._angle_canvas.paste_from_clipboard():
             self._mark_dirty()
+            self._angle_canvas.setFocus()
         else:
             msgbox.information(
                 self, "붙여넣기",
-                "클립보드에 이미지가 없습니다.\nPACS에서 X-ray를 복사한 후 다시 시도하세요.",
+                "클립보드에 이미지가 없습니다.\n"
+                "PACS에서 X-ray를 복사한 후 다시 시도하세요.\n\n"
+                "이미지 파일은 탐색기에서 복사(Ctrl+C)해 붙여넣거나,\n"
+                "X-ray 영역으로 끌어다 놓아도 됩니다.",
             )
 
     # ================================================================
@@ -1099,7 +1332,8 @@ class CaseWorkflowWidget(QWidget):
         except Exception:
             age = 0
 
-        sides = self._get_active_sides()
+        # 측정한 발만 저장한다 (한쪽만 측정한 경우 리포트에 빈 발이 나오지 않도록)
+        sides = self._measured_sides()
         primary = sides[0]
         primary_angles = self._get_angles_for_side(primary)
         primary_rec = self._recommendations.get(primary) or {}
@@ -1127,7 +1361,7 @@ class CaseWorkflowWidget(QWidget):
         }
 
         angle_data: dict[str, Any] = {
-            "foot_side": self._foot_side,
+            "foot_side": self._measured_foot_side(),
             "measurements": self._angle_canvas.get_measurements_data(),
             "clinical": {s: self._get_clinical_for_side(s) for s in sides},
         }
@@ -1184,6 +1418,33 @@ class CaseWorkflowWidget(QWidget):
             pass
         return case_id
 
+    def _open_report(self) -> None:
+        """환자가 알림톡으로 받을 리포트 페이지를 브라우저로 연다 (링크도 클립보드에 복사)."""
+        url = self._current_report_url or ""
+        if not self._current_case_id or not url:
+            msgbox.information(
+                self, "리포트 보기",
+                "아직 저장하지 않은 케이스입니다.\n저장하면 환자용 리포트가 만들어집니다.",
+            )
+            return
+        if not url.startswith(("http://", "https://")):
+            # 테스트 버전 등: 리포트 페이지가 없다
+            msgbox.information(self, "리포트 보기", url)
+            return
+        if self._dirty:
+            msgbox.information(
+                self, "리포트 보기",
+                "저장하지 않은 변경사항은 리포트에 아직 반영되지 않았습니다.\n"
+                "지금 열리는 리포트는 마지막으로 저장한 내용입니다.",
+            )
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(url)
+        QDesktopServices.openUrl(QUrl(url))
+        self._copy_status_lbl.setText("리포트 링크를 열고 클립보드에 복사했습니다")
+
     def _save_only(self) -> None:
         case_id = self._save_case()
         if case_id:
@@ -1238,11 +1499,11 @@ class CaseWorkflowWidget(QWidget):
             "[무지외반증 수술 결정]",
             f"환자: {patient.get('name', '-')} ({patient.get('birth', '-')})",
             f"등록번호: {patient.get('reg_no', '-')}",
-            f"측정 발: {foot_labels.get(self._foot_side, '')}",
+            f"측정 발: {foot_labels.get(self._measured_foot_side(), '')}",
             "",
         ]
 
-        for side in self._get_active_sides():
+        for side in self._measured_sides():
             angles = self._get_angles_for_side(side)
             clinical = self._get_clinical_for_side(side)
             rec = self._recommendations.get(side) or {}
@@ -1303,6 +1564,7 @@ class CaseWorkflowWidget(QWidget):
     def reset(self) -> None:
         self._loading = True
         self._recommendations = {"left": None, "right": None}
+        self._started_side = None
         self._current_case_id = None
         self._current_report_url = ""
         self._set_read_only(False)
@@ -1345,6 +1607,7 @@ class CaseWorkflowWidget(QWidget):
 
         # Don't carry the previously open case's recommendation into this one
         self._recommendations = {"left": None, "right": None}
+        self._started_side = None
         for p in self._panels.values():
             p["rec_surgery_lbl"].setText("-")
             p["addon_lbl"].setText("")

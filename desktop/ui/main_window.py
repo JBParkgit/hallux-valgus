@@ -167,7 +167,8 @@ class MainWindow(QMainWindow):
 
         nav_items = [
             ("대시보드", "dashboard", 0),
-            ("새 케이스", "plus", 1),
+            # 작업 중인 케이스로 돌아가는 메뉴 (새 케이스는 작업 화면의 '+ 새 케이스' 버튼)
+            ("케이스 작업", "folder", 1),
         ]
         self._nav_new_case_idx = 1
 
@@ -263,7 +264,7 @@ class MainWindow(QMainWindow):
 
         # Dashboard
         self._dashboard = DashboardWidget(doctor_id=self._doctor_id, parent=self)
-        self._dashboard.new_case_requested.connect(lambda: self._navigate(1))
+        self._dashboard.new_case_requested.connect(self._start_new_case)
         self._dashboard.case_selected.connect(self._open_case_detail)
         self._dashboard.case_deleted.connect(self._refresh_case_list)
         self._stack.addWidget(self._dashboard)
@@ -276,6 +277,9 @@ class MainWindow(QMainWindow):
         self._case_workflow._doctor_id = self._doctor_id
         self._case_workflow.reload_algorithm_config()  # this doctor's settings
         self._case_workflow.case_saved.connect(self._on_case_saved)
+        self._case_workflow.new_case_requested.connect(self._start_new_case)
+        self._case_workflow.case_title_changed.connect(self._update_case_nav_label)
+        self._case_workflow._emit_case_title()  # 시작 시 이미 채워진 환자 이름 반영
         self._stack.addWidget(self._case_workflow)
 
         # Admin
@@ -307,12 +311,10 @@ class MainWindow(QMainWindow):
     # ── Navigation ──────────────────────────────────────────────
 
     def _navigate(self, index: int) -> None:
-        """Switch stacked widget to the given index and update nav styling."""
-        if index == self._nav_new_case_idx:
-            if not self._case_workflow.confirm_discard():
-                self._sync_nav_checked(self._stack.currentIndex())
-                return
-            self._case_workflow.reset()
+        """Switch stacked widget to the given index and update nav styling.
+
+        '케이스 작업'으로 오면 작업하던 화면이 그대로 남아 있다 (초기화하지 않음).
+        """
         self._stack.setCurrentIndex(index)
         if self._is_admin and index == self._admin_idx:
             self._admin.refresh()
@@ -323,6 +325,21 @@ class MainWindow(QMainWindow):
         self._case_list_lbl.setVisible(show_list)
         self._sidebar_spacer.setVisible(not show_list)
         self._sync_nav_checked(index)
+
+    def _start_new_case(self) -> None:
+        """'+ 새 케이스': 저장 안 된 내용이 있으면 확인 후 빈 케이스로 시작."""
+        if not self._case_workflow.confirm_discard():
+            return
+        self._case_workflow.reset()
+        self._navigate(self._nav_new_case_idx)
+        self._case_list.clearSelection()
+
+    def _update_case_nav_label(self, patient_name: str) -> None:
+        """메뉴에 작업 중인 환자 이름을 함께 표시 (예: '케이스 작업 · 홍길동')."""
+        btn = self._nav_buttons[self._nav_new_case_idx]
+        name = patient_name if len(patient_name) <= 6 else patient_name[:6] + "…"
+        btn.setText(f"  케이스 작업 · {name}" if name else "  케이스 작업")
+        btn.setToolTip(f"작업 중인 케이스: {patient_name}" if patient_name else "작업 중인 케이스로 돌아갑니다")
 
     def _sync_nav_checked(self, index: int) -> None:
         for i, btn in enumerate(self._nav_buttons):
@@ -360,10 +377,7 @@ class MainWindow(QMainWindow):
         """Open existing case in the workflow widget for viewing."""
         if not self._case_workflow.confirm_discard():
             return
-        self._case_workflow._loading = True
-        self._case_workflow._clear_dirty()
         self._navigate(1)
-        self._case_workflow._loading = False
         self._case_workflow.load_case(case_id)
         # Highlight in sidebar
         for i in range(self._case_list.count()):

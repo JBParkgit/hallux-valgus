@@ -24,8 +24,9 @@ MAX_XRAY_BYTES = int(_env("MAX_XRAY_MB", "25")) * 1024 * 1024
 # Login sessions
 TOKEN_TTL_HOURS = int(_env("TOKEN_TTL_HOURS", "12"))
 
-# Public report page base URL; the case's reportHash is appended
-REPORT_BASE_URL = _env("REPORT_BASE_URL", "https://hallux-valgus.vercel.app/report").rstrip("/")
+# Public report page base URL; the case's reportHash is appended.
+# The report site is served by this server's nginx (deploy/enable-report.sh).
+REPORT_BASE_URL = _env("REPORT_BASE_URL", "https://hv.hospitalrun.co.kr/report").rstrip("/")
 
 # Alimtalk — sent through the existing relay server (it forwards to Biztalk as-is)
 RELAY_URL = _env("ALIMTALK_RELAY_URL", "http://203.245.41.19:5003/send-alimtalk")
