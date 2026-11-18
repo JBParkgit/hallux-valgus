@@ -16,7 +16,7 @@ a = Analysis(
     ["desktop/main.py"],
     pathex=[project_root],
     binaries=[],
-    datas=[],
+    datas=[("desktop/resources/app.ico", "desktop/resources")],  # 창·작업 표시줄 아이콘
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
@@ -66,7 +66,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon="desktop/resources/app.ico",  # 병원 로고 (무지외반증 사이트 파비콘과 같음)
 )
 
 coll = COLLECT(

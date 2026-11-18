@@ -656,8 +656,30 @@ def stylesheet() -> str:
     """
 
 
+def _apply_app_icon(app: QApplication) -> None:
+    """창·작업 표시줄 아이콘 = 병원 로고 (무지외반증 사이트 파비콘과 같은 파일)."""
+    import os
+    import sys
+
+    from PyQt6.QtGui import QIcon
+
+    from desktop.core.paths import resource_path
+
+    path = resource_path("app.ico")
+    if os.path.exists(path):
+        app.setWindowIcon(QIcon(path))
+    if sys.platform == "win32":
+        # 작업 표시줄에서 python 아이콘이 아니라 이 앱 아이콘으로 묶이게 한다
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("HospitalRun.HalluxValgus")
+        except Exception:
+            pass
+
+
 def apply(app: QApplication) -> None:
     """Install palette, default font and global stylesheet on the app."""
+    _apply_app_icon(app)
     app.setStyle("Fusion")
     app.setFont(font(10))
 

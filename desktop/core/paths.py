@@ -23,3 +23,14 @@ def data_dir(*parts: str) -> str:
     path = os.path.join(app_root(), "data", *parts)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def resource_path(*parts: str) -> str:
+    """번들에 포함된 읽기 전용 리소스 (아이콘 등).
+
+    PyInstaller 로 빌드하면 _internal(sys._MEIPASS) 아래, 개발 환경에서는 desktop/resources 아래.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return os.path.join(base, "desktop", "resources", *parts)
+    return os.path.join(os.path.dirname(__file__), "..", "resources", *parts)
