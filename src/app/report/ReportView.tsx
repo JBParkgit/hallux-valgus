@@ -86,6 +86,9 @@ const SEVERITY_KO_MAP: Record<string, keyof typeof SEVERITY_CONFIG> = {
   "중증": "severe",
 };
 
+/** 병원 무지외반증 클리닉 페이지 (리포트 하단 '병원 정보'에서 연결) */
+const HOSPITAL_BUNION_URL = "https://www.hospitalrun.co.kr/bunion/";
+
 /** 같은 수술의 다른 이름 → SURGERY_INFO 의 이름 */
 const SURGERY_ALIASES: Record<string, string> = {
   "핀홀교정술": "핀홀 무지외반증 교정술",
@@ -648,15 +651,8 @@ export function ReportView({
   const imageUrl = caseData.xrayUrl;
   const createdDate = formatDate(caseData.createdAt);
 
-  // determine overall severity for header gradient
-  const overallSeverity = parseSeverityKey(
-    angleData.left_surgery?.severity ??
-    angleData.right_surgery?.severity ??
-    caseData.severity
-  );
-  const headerGradient = overallSeverity
-    ? SEVERITY_CONFIG[overallSeverity].color
-    : "from-blue-600 to-indigo-700";
+  // 머리글은 병원 색으로 고정 (중증도 색은 본문의 발별 배지·진단 박스에서만 사용)
+  const headerGradient = "from-blue-600 to-indigo-700";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -877,6 +873,18 @@ export function ReportView({
                   <p className="text-[13px] font-bold text-gray-800 mt-0.5">{createdDate}</p>
                 </div>
               </div>
+              <a
+                href={HOSPITAL_BUNION_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 rounded-xl bg-blue-600 px-4 py-3 text-white"
+              >
+                <span>
+                  <span className="block text-[13px] font-bold">달려라병원 무지외반증 클리닉</span>
+                  <span className="block text-[11px] text-white/75 mt-0.5">병원 홈페이지에서 자세히 보기</span>
+                </span>
+                <span aria-hidden className="text-lg font-bold">↗</span>
+              </a>
             </div>
           </section>
 
