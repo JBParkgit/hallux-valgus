@@ -86,36 +86,26 @@ const SEVERITY_KO_MAP: Record<string, keyof typeof SEVERITY_CONFIG> = {
   "중증": "severe",
 };
 
-const SURGERY_INFO: Record<string, { desc: string; detail: string; recovery: string; anesthesia: string }> = {
+const SURGERY_INFO: Record<string, { desc: string; detail: string }> = {
   "Chevron 절골술": {
     desc: "원위 중족골 V자형 절골술",
     detail: "제1중족골 원위부를 V자(chevron) 모양으로 절골한 후 외측으로 이동시켜 고정합니다. 경증~중등도의 무지외반증에 가장 널리 사용되는 술식으로, 수술 시간이 짧고 회복이 비교적 빠릅니다. 절골 부위는 특수 나사(screw)로 고정하며, 뼈가 유합된 후에는 제거하지 않아도 됩니다.",
-    recovery: "4~6주",
-    anesthesia: "하반신 마취",
   },
   "Scarf 절골술": {
     desc: "중족골 Z자형 절골술",
     detail: "제1중족골을 Z자 모양으로 길게 절골하여 정밀하게 교정합니다. Chevron 절골술보다 큰 교정이 가능하며, 특히 중등도 변형에 효과적입니다. 넓은 절골면이 안정적인 고정을 제공하고, 3차원적 교정(회전, 단축, 이동)이 가능한 장점이 있습니다.",
-    recovery: "6~8주",
-    anesthesia: "하반신 마취",
   },
   "근위 절골술": {
     desc: "근위 중족골 절골술",
     detail: "제1중족골의 기저부(몸쪽)에서 절골하여 큰 각도의 교정을 수행합니다. 중족골간각(IMA)이 크게 증가된 경우에 효과적이며, 근본적인 교정이 가능합니다. 절골 후 금속판 또는 나사로 고정하며, 뼈 유합까지 체중 부하를 제한해야 합니다.",
-    recovery: "8~12주",
-    anesthesia: "하반신 마취",
   },
   "Lapidus 절골술": {
     desc: "제1중족-내측 설상골 관절 유합술",
     detail: "제1중족-내측 설상골(TMT) 관절을 유합하여 변형의 근본 원인인 관절 불안정성을 교정합니다. 중증 변형, 과운동성(hypermobility)이 있는 경우, 재발된 무지외반증에 특히 효과적입니다. 재발률이 가장 낮은 술식이지만, 회복 기간이 다소 깁니다.",
-    recovery: "10~12주",
-    anesthesia: "하반신 마취",
   },
   "제1MTP 관절유합술": {
     desc: "제1중족지절 관절 유합술",
     detail: "제1중족지절(MTP) 관절을 유합하여 통증을 제거하고 안정성을 확보합니다. 심한 관절염이 동반된 중증 무지외반증, 이전 수술 후 재발, 또는 관절 파괴가 진행된 경우에 시행합니다. 관절 운동은 제한되지만 통증 해소 효과가 확실합니다.",
-    recovery: "10~12주",
-    anesthesia: "하반신 마취",
   },
 };
 
@@ -347,17 +337,6 @@ function FootReportSection({
                     </p>
                   </div>
                 )}
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="bg-white rounded-xl border border-blue-100 px-3 py-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 font-medium">예상 회복 기간</p>
-                    <p className="text-base font-extrabold text-blue-700 mt-0.5">{surgeryDetail.recovery}</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-blue-100 px-3 py-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 font-medium">마취 방법</p>
-                    <p className="text-[13px] font-bold text-blue-700 mt-0.5">{surgeryDetail.anesthesia}</p>
-                  </div>
-                </div>
               </>
             )}
 
