@@ -20,10 +20,10 @@ const COLOR = { HVA: "#e5484d", IMA: "#2f6fe0", DMAA: "#13a37a" } as const;
 
 // public/guide/foot-left.jpg (550×750) 위의 좌표 — 왼발을 위(발등 쪽)에서 본 그림
 const IMG = { src: "/guide/foot-left.jpg", w: 550, h: 750 };
-const M1: [P, P] = [[348, 550], [437, 355]];  // 제1중족골 축 (몸쪽 → 발가락쪽)
+const M1: [P, P] = [[348, 550], [425, 352]];  // 제1중족골 축: 기저부 중심 → 머리 중심
 const P1: [P, P] = [[408, 292], [366, 160]];  // 엄지 첫마디뼈(근위지골) 축
 const M2: [P, P] = [[262, 670], [292, 312]];  // 제2중족골 축
-const ART: [P, P] = [[388, 318], [482, 305]]; // 제1중족골 머리의 관절면 양 끝
+const ART: [P, P] = [[386, 309], [463, 307]]; // 제1중족골 머리 관절면의 양 끝 (튀어나온 혹이 아니라 관절면)
 
 function ext([a, b]: [P, P], k: number): [P, P] {
   const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
